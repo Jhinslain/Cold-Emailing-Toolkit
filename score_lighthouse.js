@@ -127,7 +127,7 @@ async function processUrls(rows, concurrency = 4) {
   const results = new Array(rows.length);
   let currentIndex = 0;
   let processedCount = 0;
-  const BACKUP_INTERVAL = 100;
+  const BACKUP_INTERVAL = 200;
 
   async function processUrl(row, index) {
     const website = (row.Website || "").trim();
@@ -205,6 +205,22 @@ async function processUrls(rows, concurrency = 4) {
   return results;
 }
 
+// Fonction pour nettoyer les sauvegardes
+async function cleanupBackups(outputFile) {
+  const backupPattern = outputFile.replace('.csv', '_backup_*.csv');
+  const files = fs.readdirSync('.');
+  const backupFiles = files.filter(file => file.match(new RegExp(backupPattern.replace('*', '\\d+'))));
+  
+  for (const file of backupFiles) {
+    try {
+      fs.unlinkSync(file);
+      console.log(`🧹 Sauvegarde supprimée : ${file}`);
+    } catch (error) {
+      console.error(`⚠️ Erreur lors de la suppression de la sauvegarde ${file}:`, error.message);
+    }
+  }
+}
+
 (async () => {
   console.time("Batch");
   const rows = await readCsv(argv.input);
@@ -214,6 +230,9 @@ async function processUrls(rows, concurrency = 4) {
     const processedRows = await processUrls(rows, argv.concurrency);
     await writeCsv(argv.output, processedRows);
     console.log(`:coche_blanche:  Résultats écrits dans ${argv.output}`);
+    
+    // Nettoyage des sauvegardes après un traitement réussi
+    await cleanupBackups(argv.output);
   } catch (error) {
     console.error(":x:  Erreur lors du traitement :", error);
     // En cas d'erreur, on sauvegarde l'état actuel

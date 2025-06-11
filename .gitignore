@@ -4,13 +4,11 @@ package-lock.json
 
 # CSV de travail
 *.csv
-!exemple.csv
 
 # Fichiers de sortie ou temporaires
 output/
 results/
-temp_*.csv
-*_backup_*.csv
+olds/
 
 # Autres
 .DS_Store
