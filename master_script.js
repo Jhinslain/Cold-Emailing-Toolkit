@@ -8,10 +8,11 @@ const path = require('path');
 
 // Configuration des clés API
 const API_KEYS = [
-  'AIzaSyD0u3W7oJ_CjsZ9pTrdiXcBXrVgTHoyViU',
-  'AIzaSyAUFbNE3eaj_KOG3K-3UEEbtiMziKOoChc',
-  'AIzaSyD003NPDofDbJH1qLEqwEOSfQk8ZJBde10'
-];
+  process.env.API_KEY_1,
+  process.env.API_KEY_2,
+  process.env.API_KEY_3,
+].filter(Boolean); // pour éviter les undefined si une clé est manquante
+
 
 // Fonction pour lire le CSV
 function readCsv(path) {

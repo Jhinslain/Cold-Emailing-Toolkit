@@ -4,7 +4,7 @@ package-lock.json
 
 # CSV de travail
 *.csv
-exemple.csv
+!exemple.csv
 
 # Fichiers de sortie ou temporaires
 output/
