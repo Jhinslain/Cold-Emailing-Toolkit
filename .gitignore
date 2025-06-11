@@ -1,6 +1,17 @@
-.csv
-.json
-node_modules
-output
-results
-olds
+# Dépendances
+node_modules/
+package-lock.json
+
+# CSV de travail
+*.csv
+exemple.csv
+
+# Fichiers de sortie ou temporaires
+output/
+results/
+temp_*.csv
+*_backup_*.csv
+
+# Autres
+.DS_Store
+.env
