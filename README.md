@@ -14,6 +14,12 @@ Le système est composé de trois scripts principaux qui travaillent ensemble po
 ## 📋 Description des Scripts
 
 ### 1. Script de Division (`split_csv.js`)
+1. Placez votre fichier CSV à diviser (nommé `leadsFull.csv`) dans le même dossier que le script
+2. Exécutez le script :
+```bash
+node split_csv.js
+```
+
 - Divise un fichier CSV volumineux en plusieurs fichiers plus petits
 - Crée des morceaux de 600 lignes avec en-têtes conservés
 - Génère des fichiers `leads1.csv`, `leads2.csv`, etc. dans le dossier `output`
@@ -139,55 +145,3 @@ Website,psi_mobile_score,psi_seo_score,lcp_p75_ms,cls_p75,inp_p75_ms,custom_hook
 https://example.com,85,90,1200,0.1,200,""
 https://slow-site.com,45,75,3500,0.3,450,"Google évalue votre site mobile à seulement 45/100 de performance..."
 ```
-
-## 🔄 Reprise après erreur
-
-En cas d'erreur :
-1. Le script crée une sauvegarde de l'état actuel
-2. Les fichiers temporaires sont conservés
-3. Relancer le script avec le dernier fichier de sauvegarde
-
-## 📊 Monitoring
-
-Les logs incluent :
-- Progression en temps réel
-- Erreurs détaillées
-- Statistiques de traitement
-- État des sauvegardes
-
-# Script de Division de Fichier CSV
-
-Ce script permet de diviser un fichier CSV volumineux en plusieurs fichiers plus petits, tout en conservant les en-têtes dans chaque fichier.
-
-## Prérequis
-
-- Node.js installé sur votre système
-- Les dépendances npm installées
-
-## Installation
-
-1. Installez les dépendances nécessaires :
-```bash
-npm install
-```
-
-## Utilisation
-
-1. Placez votre fichier CSV à diviser (nommé `leadsFull.csv`) dans le même dossier que le script
-2. Exécutez le script :
-```bash
-node split_csv.js
-```
-
-## Fonctionnement
-
-Le script va :
-- Lire le fichier `leadsFull.csv`
-- Créer un dossier `output`
-- Diviser le fichier en morceaux de 600 lignes
-- Générer des fichiers `leads1.csv`, `leads2.csv`, etc. dans le dossier `output`
-- Conserver les en-têtes du fichier original dans chaque nouveau fichier
-
-## Personnalisation
-
-Si vous souhaitez modifier la taille des morceaux, vous pouvez modifier la constante `CHUNK_SIZE` dans le fichier `split_csv.js` (par défaut : 600 lignes). 
