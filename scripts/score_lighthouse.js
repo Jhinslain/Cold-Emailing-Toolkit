@@ -26,30 +26,76 @@ const axios = require("axios");
 const Bottleneck = require("bottleneck");
 const yargs = require("yargs/yargs");
 const { hideBin } = require("yargs/helpers");
+const path = require("path");
 require("dotenv").config();
 // ──────────────────────────────── CLI ────────────────────────────────
 const argv = yargs(hideBin(process.argv))
-  .option("input", { alias: "i", demandOption: true, type: "string" })
-  .option("output", { alias: "o", demandOption: true, type: "string" })
-  .option("crux", { describe: "Fetch CrUX field data", type: "boolean", default: false })
-  .option("concurrency", { describe: "Requests per second", type: "number", default: 4 })
-  .option("api-key", { describe: "Google API Key", type: "string", demandOption: true })
+  .option("input", { 
+    alias: "i", 
+    type: "string", 
+    describe: "Fichier d'entrée CSV"
+  })
+  .option("output", { 
+    alias: "o", 
+    type: "string", 
+    describe: "Fichier de sortie CSV"
+  })
+  .option("crux", { 
+    describe: "Fetch CrUX field data", 
+    type: "boolean", 
+    default: false 
+  })
+  .option("concurrency", { 
+    describe: "Requests per second", 
+    type: "number", 
+    default: 4 
+  })
   .help().argv;
-const API_KEY = argv["api-key"];
-if (!API_KEY) {
-  console.error(":x:  Missing API key");
+
+// Vérification que les paramètres requis sont présents
+if (!argv.input || !argv.output) {
+  console.error("❌ Les paramètres --input et --output sont requis");
   process.exit(1);
 }
+
+// Vérification que le fichier d'entrée existe
+if (!fs.existsSync(argv.input)) {
+  console.error(`❌ Le fichier d'entrée n'existe pas: ${argv.input}`);
+  process.exit(1);
+}
+
+console.log(`📥 Lecture du fichier: ${argv.input}`);
+
+const API_KEYS = [
+  process.env.API_KEY_1,
+  process.env.API_KEY_2,
+  process.env.API_KEY_3,
+].filter(Boolean);
+
+if (API_KEYS.length === 0) {
+  console.error(":x:  Aucune clé API n'est configurée. Veuillez définir API_KEY_1, API_KEY_2 et API_KEY_3 dans le fichier .env");
+  process.exit(1);
+}
+
+let currentKeyIndex = 0;
+
+function getNextApiKey() {
+  const key = API_KEYS[currentKeyIndex];
+  currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
+  return key;
+}
+
 // ──────────────── Throttled HTTP helpers ────────────────
 const limiter = new Bottleneck({ minTime: Math.ceil(1000 / argv.concurrency) });
 const httpGet = (...a) => limiter.schedule(() => axios.get(...a));
 const httpPost = (...a) => limiter.schedule(() => axios.post(...a));
 // ──────────────── PageSpeed & CrUX fetchers ────────────────
 async function fetchPsi(url) {
+  const apiKey = getNextApiKey();
   const endpoint =
     `https://www.googleapis.com/pagespeedonline/v5/runPagespeed` +
     `?url=${encodeURIComponent(url)}` +
-    `&strategy=mobile&category=performance&category=seo&key=${API_KEY}`;
+    `&strategy=mobile&category=performance&category=seo&key=${apiKey}`;
   const { data } = await httpGet(endpoint);
   return {
     perf: data.lighthouseResult?.categories?.performance?.score != null
@@ -61,6 +107,7 @@ async function fetchPsi(url) {
   };
 }
 async function fetchCrux(origin) {
+  const apiKey = getNextApiKey();
   const body = {
     origin,
     metrics: [
@@ -69,7 +116,7 @@ async function fetchCrux(origin) {
       "interaction_to_next_paint",
     ],
   };
-  const url = `https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${API_KEY}`;
+  const url = `https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${apiKey}`;
   const { data } = await httpPost(url, body, { headers: { "Content-Type": "application/json" } });
   const m = data.record?.metrics || {};
   const p75 = (metric) => metric?.percentiles?.p75 ?? null;

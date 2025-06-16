@@ -5,7 +5,7 @@ const { stringify } = require('csv-stringify/sync');
 
 const CHUNK_SIZE = 600;
 
-function splitCSV(inputFile) {
+function splitCSV(inputFile, outputDir) {
     // Lire le fichier CSV
     const fileContent = fs.readFileSync(inputFile, 'utf-8');
     
@@ -23,9 +23,8 @@ function splitCSV(inputFile) {
     const numFiles = Math.ceil(totalRows / CHUNK_SIZE);
 
     // Créer le dossier de sortie s'il n'existe pas
-    const outputDir = 'output';
     if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir);
+        fs.mkdirSync(outputDir, { recursive: true });
     }
 
     // Diviser et sauvegarder les fichiers
@@ -49,6 +48,13 @@ function splitCSV(inputFile) {
     }
 }
 
+// Vérification des arguments
+if (process.argv.length < 4) {
+    console.error('Usage: node split_csv.js <input_file.csv> <output_directory>');
+    process.exit(1);
+}
+
 // Exécuter le script
-const inputFile = 'leadsFull.csv';
-splitCSV(inputFile); 
+const inputFile = process.argv[2];
+const outputDir = process.argv[3];
+splitCSV(inputFile, outputDir); 
