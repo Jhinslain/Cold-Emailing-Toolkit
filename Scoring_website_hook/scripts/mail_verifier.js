@@ -49,6 +49,7 @@ async function verifyEmail(email) {
     try {
         const response = await httpGet(options);
         const result = JSON.parse(response.body);
+                
         return {
             quality: result.quality,
             note: result.quality === 'good' ? 'Good' : result.quality === 'risky' ? 'Risky' : 'Bad'
@@ -64,7 +65,7 @@ function readCsv(path) {
     return new Promise((res, rej) => {
         const rows = [];
         fs.createReadStream(path)
-            .pipe(csv())
+            .pipe(csv({ separator: ';' }))
             .on('data', (d) => rows.push(d))
             .on('end', () => res(rows))
             .on('error', rej);
@@ -72,6 +73,10 @@ function readCsv(path) {
 }
 
 async function writeCsv(path, rows) {
+    if (!rows || rows.length === 0) {
+        console.log('⚠️ Aucune donnée à écrire');
+        return;
+    }
     const header = Object.keys(rows[0]).map((id) => ({ id, title: id }));
     return createObjectCsvWriter({ path, header }).writeRecords(rows);
 }
@@ -97,7 +102,7 @@ async function processEmails(rows) {
 
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        const email = row.Email;
+        const email = row.Email || row.email;
         
         if (!email) {
             row.Email_note = 'No email';
@@ -149,15 +154,26 @@ async function cleanupBackups(outputFile) {
     const rows = await readCsv(INPUT_FILE);
     console.log(`📊 Chargement de ${rows.length} emails…`);
     
+    let results = [];
+    let processedCount = 0;
+    
     try {
-        const { results, processedCount } = await processEmails(rows);
+        console.log('🚀 Début du traitement des emails...');
+        const processResult = await processEmails(rows);
+        results = processResult.results;
+        processedCount = processResult.processedCount;
+        console.log(`✅ Traitement terminé: ${processedCount} emails traités`);
         
         // Filtrer pour ne garder que les emails valides
         const goodEmails = filterGoodEmails(results);
         
-        // Sauvegarder uniquement les emails valides
-        await writeCsv(OUTPUT_FILE, goodEmails);
-        console.log(`✅ ${goodEmails.length} emails valides sauvegardés dans ${OUTPUT_FILE}`);
+        if (goodEmails.length > 0) {
+            // Sauvegarder uniquement les emails valides
+            await writeCsv(OUTPUT_FILE, goodEmails);
+            console.log(`✅ ${goodEmails.length} emails valides sauvegardés dans ${OUTPUT_FILE}`);
+        } else {
+            console.log('⚠️ Aucun email valide trouvé, fichier de sortie non créé');
+        }
         
         await cleanupBackups(OUTPUT_FILE);
     } catch (error) {
