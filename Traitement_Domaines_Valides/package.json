@@ -1,0 +1,53 @@
+{
+  "name": "traitement-domaines-valides",
+  "version": "1.0.0",
+  "description": "Script de traitement et filtrage de domaines en supprimant ceux avec une date de retrait WHOIS",
+  "main": "scripts/run_domaines.cjs",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node scripts/run_domaines.cjs",
+    "test": "node scripts/test_domain_valide.cjs",
+    "process": "node scripts/domain_valide.cjs",
+    "advanced": "node scripts/domain_valide_advanced.cjs",
+    "contacts": "node scripts/process_csv_domains.cjs",
+    "analyze": "node scripts/analyze_domain.cjs",
+    "launch": "lancer_traitement.bat"
+  },
+  "dependencies": {
+    "node-stream-zip": "^1.15.0",
+    "csv-parse": "^5.5.0",
+    "csv-stringify": "^6.4.0",
+    "libphonenumber-js": "^1.10.0",
+    "cheerio": "^1.0.0-rc.12",
+    "undici": "^5.0.0",
+    "node-fetch": "^3.3.0",
+    "dotenv": "^16.0.0",
+    "whois": "^2.13.5",
+    "geoip-lite": "^1.4.7",
+    "axios": "^1.6.0"
+  },
+  "keywords": [
+    "domains",
+    "whois",
+    "filtering",
+    "csv",
+    "processing",
+    "validation",
+    "email",
+    "phone",
+    "contacts"
+  ],
+  "author": "Assistant IA",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "local"
+  },
+  "bugs": {
+    "url": "local"
+  },
+  "homepage": "local"
+} 

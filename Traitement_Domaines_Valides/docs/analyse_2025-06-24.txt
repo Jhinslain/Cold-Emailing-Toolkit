@@ -1,0 +1,508 @@
+📊 ANALYSE DÉTAILLÉE DU FICHIER DE DOMAINES
+=============================================
+
+📈 STATISTIQUES GÉNÉRALES
+--------------------------
+📊 Nombre total de lignes: 9 264 417
+✅ Domaines valides: 4 310 084 (46.52%)
+❌ Domaines invalides: 4 954 332 (53.48%)
+
+🏢 STATISTIQUES COMPLÈTES PAR FOURNISSEUR
+------------------------------------------
+Total: 641 fournisseurs différents (affichage des 10 premiers)
+
+001. OVH                            |  3323445 |  35.87%
+002. IONOS SE                       |  1253495 |  13.53%
+003. GANDI                          |   993045 |  10.72%
+004. SCALEWAY                       |   350959 |   3.79%
+005. KEY-SYSTEMS GmbH               |   337144 |   3.64%
+006. EPAG Domainservices GmbH       |   315113 |   3.40%
+007. Hosting Concepts B.V. d/b/a Openprovider |   280100 |   3.02%
+008. SAS Ligne Web Services - LWS   |   270117 |   2.92%
+009. AMEN / Agence des Médias Numériques |   183771 |   1.98%
+010. Infomaniak Network SA          |   157965 |   1.71%
+
+📅 STATISTIQUES PAR MOIS
+------------------------
+décembre 1994: 344 domaines
+janvier 1995: 1 domaines
+mars 1995: 15 domaines
+avril 1995: 14 domaines
+mai 1995: 13 domaines
+juin 1995: 13 domaines
+juillet 1995: 27 domaines
+août 1995: 24 domaines
+septembre 1995: 38 domaines
+octobre 1995: 45 domaines
+novembre 1995: 40 domaines
+décembre 1995: 44 domaines
+janvier 1996: 68 domaines
+février 1996: 65 domaines
+mars 1996: 94 domaines
+avril 1996: 82 domaines
+mai 1996: 92 domaines
+juin 1996: 102 domaines
+juillet 1996: 123 domaines
+août 1996: 102 domaines
+septembre 1996: 151 domaines
+octobre 1996: 145 domaines
+novembre 1996: 156 domaines
+décembre 1996: 206 domaines
+janvier 1997: 228 domaines
+février 1997: 303 domaines
+mars 1997: 263 domaines
+avril 1997: 296 domaines
+mai 1997: 247 domaines
+juin 1997: 318 domaines
+juillet 1997: 277 domaines
+août 1997: 233 domaines
+septembre 1997: 293 domaines
+octobre 1997: 358 domaines
+novembre 1997: 428 domaines
+décembre 1997: 465 domaines
+janvier 1998: 534 domaines
+février 1998: 639 domaines
+mars 1998: 746 domaines
+avril 1998: 723 domaines
+mai 1998: 608 domaines
+juin 1998: 661 domaines
+juillet 1998: 611 domaines
+août 1998: 455 domaines
+septembre 1998: 611 domaines
+octobre 1998: 609 domaines
+novembre 1998: 780 domaines
+décembre 1998: 744 domaines
+janvier 1999: 738 domaines
+février 1999: 812 domaines
+mars 1999: 975 domaines
+avril 1999: 814 domaines
+mai 1999: 819 domaines
+juin 1999: 972 domaines
+juillet 1999: 831 domaines
+août 1999: 714 domaines
+septembre 1999: 986 domaines
+octobre 1999: 1 246 domaines
+novembre 1999: 1 379 domaines
+décembre 1999: 1 097 domaines
+janvier 2000: 1 381 domaines
+février 2000: 1 381 domaines
+mars 2000: 1 549 domaines
+avril 2000: 1 668 domaines
+mai 2000: 1 860 domaines
+juin 2000: 1 459 domaines
+juillet 2000: 1 536 domaines
+août 2000: 1 239 domaines
+septembre 2000: 1 290 domaines
+octobre 2000: 1 405 domaines
+novembre 2000: 1 579 domaines
+décembre 2000: 1 369 domaines
+janvier 2001: 1 594 domaines
+février 2001: 1 290 domaines
+mars 2001: 1 250 domaines
+avril 2001: 1 172 domaines
+mai 2001: 1 075 domaines
+juin 2001: 993 domaines
+juillet 2001: 1 231 domaines
+août 2001: 862 domaines
+septembre 2001: 989 domaines
+octobre 2001: 1 108 domaines
+novembre 2001: 1 327 domaines
+décembre 2001: 1 227 domaines
+janvier 2002: 1 334 domaines
+février 2002: 1 197 domaines
+mars 2002: 1 054 domaines
+avril 2002: 1 054 domaines
+mai 2002: 884 domaines
+juin 2002: 978 domaines
+juillet 2002: 1 109 domaines
+août 2002: 683 domaines
+septembre 2002: 915 domaines
+octobre 2002: 1 019 domaines
+novembre 2002: 961 domaines
+décembre 2002: 926 domaines
+janvier 2003: 986 domaines
+février 2003: 1 065 domaines
+mars 2003: 1 044 domaines
+avril 2003: 1 022 domaines
+mai 2003: 848 domaines
+juin 2003: 1 034 domaines
+juillet 2003: 1 190 domaines
+août 2003: 762 domaines
+septembre 2003: 1 104 domaines
+octobre 2003: 1 183 domaines
+novembre 2003: 1 261 domaines
+décembre 2003: 1 177 domaines
+janvier 2004: 1 522 domaines
+février 2004: 1 853 domaines
+mars 2004: 2 144 domaines
+avril 2004: 3 270 domaines
+mai 2004: 23 516 domaines
+juin 2004: 8 694 domaines
+juillet 2004: 4 334 domaines
+août 2004: 2 648 domaines
+septembre 2004: 3 895 domaines
+octobre 2004: 3 748 domaines
+novembre 2004: 3 318 domaines
+décembre 2004: 3 445 domaines
+janvier 2005: 3 557 domaines
+février 2005: 4 445 domaines
+mars 2005: 4 482 domaines
+avril 2005: 5 211 domaines
+mai 2005: 4 182 domaines
+juin 2005: 4 837 domaines
+juillet 2005: 2 976 domaines
+août 2005: 2 788 domaines
+septembre 2005: 3 723 domaines
+octobre 2005: 3 539 domaines
+novembre 2005: 4 651 domaines
+décembre 2005: 3 926 domaines
+janvier 2006: 4 383 domaines
+février 2006: 4 788 domaines
+mars 2006: 6 008 domaines
+avril 2006: 5 107 domaines
+mai 2006: 5 880 domaines
+juin 2006: 21 019 domaines
+juillet 2006: 9 477 domaines
+août 2006: 6 462 domaines
+septembre 2006: 8 300 domaines
+octobre 2006: 9 245 domaines
+novembre 2006: 8 557 domaines
+décembre 2006: 8 750 domaines
+janvier 2007: 10 413 domaines
+février 2007: 10 002 domaines
+mars 2007: 10 673 domaines
+avril 2007: 8 978 domaines
+mai 2007: 9 654 domaines
+juin 2007: 11 337 domaines
+juillet 2007: 12 079 domaines
+août 2007: 7 865 domaines
+septembre 2007: 8 919 domaines
+octobre 2007: 11 599 domaines
+novembre 2007: 10 828 domaines
+décembre 2007: 10 125 domaines
+janvier 2008: 14 611 domaines
+février 2008: 12 475 domaines
+mars 2008: 13 179 domaines
+avril 2008: 13 650 domaines
+mai 2008: 11 561 domaines
+juin 2008: 12 465 domaines
+juillet 2008: 11 927 domaines
+août 2008: 8 122 domaines
+septembre 2008: 13 428 domaines
+octobre 2008: 14 857 domaines
+novembre 2008: 13 690 domaines
+décembre 2008: 14 701 domaines
+janvier 2009: 16 226 domaines
+février 2009: 17 171 domaines
+mars 2009: 18 345 domaines
+avril 2009: 15 656 domaines
+mai 2009: 13 134 domaines
+juin 2009: 14 795 domaines
+juillet 2009: 13 324 domaines
+août 2009: 10 720 domaines
+septembre 2009: 15 992 domaines
+octobre 2009: 17 683 domaines
+novembre 2009: 18 798 domaines
+décembre 2009: 19 066 domaines
+janvier 2010: 20 874 domaines
+février 2010: 20 964 domaines
+mars 2010: 24 319 domaines
+avril 2010: 21 207 domaines
+mai 2010: 18 025 domaines
+juin 2010: 19 677 domaines
+juillet 2010: 18 372 domaines
+août 2010: 14 223 domaines
+septembre 2010: 20 552 domaines
+octobre 2010: 21 531 domaines
+novembre 2010: 21 020 domaines
+décembre 2010: 21 118 domaines
+janvier 2011: 26 645 domaines
+février 2011: 25 019 domaines
+mars 2011: 31 820 domaines
+avril 2011: 25 133 domaines
+mai 2011: 25 136 domaines
+juin 2011: 21 530 domaines
+juillet 2011: 21 053 domaines
+août 2011: 17 818 domaines
+septembre 2011: 25 412 domaines
+octobre 2011: 24 831 domaines
+novembre 2011: 25 347 domaines
+décembre 2011: 29 643 domaines
+janvier 2012: 37 154 domaines
+février 2012: 36 160 domaines
+mars 2012: 36 031 domaines
+avril 2012: 32 904 domaines
+mai 2012: 34 460 domaines
+juin 2012: 36 259 domaines
+juillet 2012: 35 949 domaines
+août 2012: 23 098 domaines
+septembre 2012: 32 539 domaines
+octobre 2012: 38 338 domaines
+novembre 2012: 34 844 domaines
+décembre 2012: 40 125 domaines
+janvier 2013: 51 788 domaines
+février 2013: 49 515 domaines
+mars 2013: 52 727 domaines
+avril 2013: 50 631 domaines
+mai 2013: 48 203 domaines
+juin 2013: 45 975 domaines
+juillet 2013: 42 959 domaines
+août 2013: 34 670 domaines
+septembre 2013: 45 178 domaines
+octobre 2013: 51 404 domaines
+novembre 2013: 47 671 domaines
+décembre 2013: 43 566 domaines
+janvier 2014: 52 034 domaines
+février 2014: 50 546 domaines
+mars 2014: 50 416 domaines
+avril 2014: 48 405 domaines
+mai 2014: 44 486 domaines
+juin 2014: 40 811 domaines
+juillet 2014: 42 136 domaines
+août 2014: 34 143 domaines
+septembre 2014: 44 820 domaines
+octobre 2014: 48 032 domaines
+novembre 2014: 45 925 domaines
+décembre 2014: 40 322 domaines
+janvier 2015: 44 115 domaines
+février 2015: 42 628 domaines
+mars 2015: 47 820 domaines
+avril 2015: 42 612 domaines
+mai 2015: 38 498 domaines
+juin 2015: 40 680 domaines
+juillet 2015: 35 115 domaines
+août 2015: 29 896 domaines
+septembre 2015: 41 130 domaines
+octobre 2015: 43 186 domaines
+novembre 2015: 41 198 domaines
+décembre 2015: 37 401 domaines
+janvier 2016: 42 806 domaines
+février 2016: 44 363 domaines
+mars 2016: 45 412 domaines
+avril 2016: 42 241 domaines
+mai 2016: 39 511 domaines
+juin 2016: 40 514 domaines
+juillet 2016: 35 919 domaines
+août 2016: 29 887 domaines
+septembre 2016: 41 173 domaines
+octobre 2016: 42 138 domaines
+novembre 2016: 43 737 domaines
+décembre 2016: 39 499 domaines
+janvier 2017: 45 735 domaines
+février 2017: 43 706 domaines
+mars 2017: 48 174 domaines
+avril 2017: 39 700 domaines
+mai 2017: 42 635 domaines
+juin 2017: 41 632 domaines
+juillet 2017: 38 012 domaines
+août 2017: 30 036 domaines
+septembre 2017: 41 656 domaines
+octobre 2017: 48 667 domaines
+novembre 2017: 49 090 domaines
+décembre 2017: 40 416 domaines
+janvier 2018: 48 249 domaines
+février 2018: 46 361 domaines
+mars 2018: 49 333 domaines
+avril 2018: 41 666 domaines
+mai 2018: 40 309 domaines
+juin 2018: 43 349 domaines
+juillet 2018: 38 684 domaines
+août 2018: 31 686 domaines
+septembre 2018: 39 983 domaines
+octobre 2018: 45 593 domaines
+novembre 2018: 44 967 domaines
+décembre 2018: 37 490 domaines
+janvier 2019: 49 748 domaines
+février 2019: 46 062 domaines
+mars 2019: 49 086 domaines
+avril 2019: 46 542 domaines
+mai 2019: 44 421 domaines
+juin 2019: 41 293 domaines
+juillet 2019: 41 673 domaines
+août 2019: 35 347 domaines
+septembre 2019: 46 369 domaines
+octobre 2019: 50 836 domaines
+novembre 2019: 51 098 domaines
+décembre 2019: 44 913 domaines
+janvier 2020: 55 129 domaines
+février 2020: 50 715 domaines
+mars 2020: 50 706 domaines
+avril 2020: 59 755 domaines
+mai 2020: 58 334 domaines
+juin 2020: 55 088 domaines
+juillet 2020: 47 691 domaines
+août 2020: 39 801 domaines
+septembre 2020: 53 350 domaines
+octobre 2020: 59 778 domaines
+novembre 2020: 69 278 domaines
+décembre 2020: 54 217 domaines
+janvier 2021: 61 595 domaines
+février 2021: 61 584 domaines
+mars 2021: 66 895 domaines
+avril 2021: 63 162 domaines
+mai 2021: 57 531 domaines
+juin 2021: 52 023 domaines
+juillet 2021: 43 656 domaines
+août 2021: 40 579 domaines
+septembre 2021: 53 444 domaines
+octobre 2021: 57 445 domaines
+novembre 2021: 59 471 domaines
+décembre 2021: 52 507 domaines
+janvier 2022: 63 026 domaines
+février 2022: 56 676 domaines
+mars 2022: 61 976 domaines
+avril 2022: 53 046 domaines
+mai 2022: 57 486 domaines
+juin 2022: 54 656 domaines
+juillet 2022: 48 502 domaines
+août 2022: 46 219 domaines
+septembre 2022: 58 678 domaines
+octobre 2022: 59 308 domaines
+novembre 2022: 64 189 domaines
+décembre 2022: 56 450 domaines
+janvier 2023: 70 657 domaines
+février 2023: 63 254 domaines
+mars 2023: 71 074 domaines
+avril 2023: 61 251 domaines
+mai 2023: 62 611 domaines
+juin 2023: 60 090 domaines
+juillet 2023: 53 237 domaines
+août 2023: 51 921 domaines
+septembre 2023: 62 016 domaines
+octobre 2023: 65 487 domaines
+novembre 2023: 69 566 domaines
+décembre 2023: 63 269 domaines
+janvier 2024: 71 259 domaines
+février 2024: 68 593 domaines
+mars 2024: 68 873 domaines
+avril 2024: 62 377 domaines
+mai 2024: 62 248 domaines
+juin 2024: 60 451 domaines
+juillet 2024: 58 234 domaines
+août 2024: 51 059 domaines
+septembre 2024: 67 475 domaines
+octobre 2024: 75 696 domaines
+novembre 2024: 72 302 domaines
+décembre 2024: 68 587 domaines
+janvier 2025: 77 411 domaines
+février 2025: 68 635 domaines
+mars 2025: 74 910 domaines
+avril 2025: 70 630 domaines
+mai 2025: 67 639 domaines
+
+📅 STATISTIQUES PAR JOUR (TOP 50)
+---------------------------------
+1. mardi 3 juillet 2012: 5 027 domaines
+2. mardi 29 mars 2011: 4 628 domaines
+3. mardi 18 mai 2004: 4 490 domaines
+4. mercredi 4 août 2021: 4 156 domaines
+5. lundi 21 octobre 2024: 3 928 domaines
+6. mardi 22 octobre 2024: 3 926 domaines
+7. lundi 17 mai 2004: 3 913 domaines
+8. vendredi 23 juin 2006: 3 623 domaines
+9. jeudi 7 novembre 2024: 3 548 domaines
+10. lundi 23 septembre 2024: 3 434 domaines
+11. mardi 8 avril 2025: 3 414 domaines
+12. jeudi 23 janvier 2025: 3 394 domaines
+13. jeudi 9 janvier 2025: 3 367 domaines
+14. mercredi 26 mars 2025: 3 339 domaines
+15. lundi 2 décembre 2024: 3 331 domaines
+16. lundi 10 février 2025: 3 321 domaines
+17. mercredi 27 novembre 2024: 3 314 domaines
+18. jeudi 5 décembre 2024: 3 311 domaines
+19. lundi 3 février 2025: 3 296 domaines
+20. mardi 29 octobre 2024: 3 282 domaines
+21. jeudi 6 février 2025: 3 267 domaines
+22. mardi 3 décembre 2024: 3 258 domaines
+23. mercredi 20 novembre 2024: 3 227 domaines
+24. jeudi 15 mai 2025: 3 210 domaines
+25. mercredi 18 décembre 2024: 3 191 domaines
+26. lundi 23 mai 2022: 3 182 domaines
+27. mercredi 11 décembre 2024: 3 175 domaines
+28. mardi 11 mars 2025: 3 143 domaines
+29. jeudi 2 mars 2023: 3 141 domaines
+30. lundi 6 janvier 2025: 3 137 domaines
+31. vendredi 25 novembre 2016: 3 135 domaines
+32. lundi 23 janvier 2023: 3 116 domaines
+33. lundi 16 novembre 2020: 3 113 domaines
+34. lundi 9 décembre 2024: 3 111 domaines
+35. lundi 27 novembre 2023: 3 103 domaines
+36. vendredi 24 novembre 2023: 3 102 domaines
+37. lundi 27 mars 2023: 3 101 domaines
+38. lundi 7 octobre 2024: 3 090 domaines
+39. mardi 18 juin 2024: 3 081 domaines
+40. lundi 20 janvier 2025: 3 080 domaines
+41. lundi 9 novembre 2020: 3 058 domaines
+42. lundi 14 avril 2025: 3 057 domaines
+43. jeudi 8 décembre 2022: 3 048 domaines
+44. mercredi 7 décembre 2022: 3 045 domaines
+45. lundi 27 janvier 2025: 3 036 domaines
+46. lundi 25 novembre 2024: 3 015 domaines
+47. mercredi 4 décembre 2024: 3 014 domaines
+48. jeudi 30 janvier 2025: 3 008 domaines
+49. mercredi 12 mars 2025: 3 003 domaines
+50. jeudi 12 décembre 2024: 2 989 domaines
+
+📊 STATISTIQUES MOYENNES
+========================
+
+📅 PÉRIODE ANALYSÉE
+-------------------
+📊 Domaines avec date de création: 9 264 416
+📅 Période couverte: 9572 jours (du 31 décembre 1994 au 31 mai 2025)
+📅 Nombre de mois: 365
+📅 Nombre d'années: 32
+
+📈 MOYENNES
+-----------
+📊 Moyenne par jour: 967.87 domaines
+📊 Moyenne par mois: 25381.96 domaines
+📊 Moyenne par année: 289513.00 domaines
+
+📅 STATISTIQUES PAR ANNÉE
+-------------------------
+1994: 344 domaines (28.67/mois, 0.94/jour)
+1995: 274 domaines (22.83/mois, 0.75/jour)
+1996: 1 386 domaines (115.50/mois, 3.80/jour)
+1997: 3 709 domaines (309.08/mois, 10.16/jour)
+1998: 7 721 domaines (643.42/mois, 21.15/jour)
+1999: 11 383 domaines (948.58/mois, 31.19/jour)
+2000: 17 716 domaines (1476.33/mois, 48.54/jour)
+2001: 14 118 domaines (1176.50/mois, 38.68/jour)
+2002: 12 114 domaines (1009.50/mois, 33.19/jour)
+2003: 12 676 domaines (1056.33/mois, 34.73/jour)
+2004: 62 387 domaines (5198.92/mois, 170.92/jour)
+2005: 48 317 domaines (4026.42/mois, 132.38/jour)
+2006: 97 976 domaines (8164.67/mois, 268.43/jour)
+2007: 122 472 domaines (10206.00/mois, 335.54/jour)
+2008: 154 666 domaines (12888.83/mois, 423.74/jour)
+2009: 190 910 domaines (15909.17/mois, 523.04/jour)
+2010: 241 882 domaines (20156.83/mois, 662.69/jour)
+2011: 299 387 domaines (24948.92/mois, 820.24/jour)
+2012: 417 861 domaines (34821.75/mois, 1144.82/jour)
+2013: 564 287 domaines (47023.92/mois, 1545.99/jour)
+2014: 542 076 domaines (45173.00/mois, 1485.14/jour)
+2015: 484 279 domaines (40356.58/mois, 1326.79/jour)
+2016: 487 200 domaines (40600.00/mois, 1334.79/jour)
+2017: 509 459 domaines (42454.92/mois, 1395.78/jour)
+2018: 507 670 domaines (42305.83/mois, 1390.88/jour)
+2019: 547 388 domaines (45615.67/mois, 1499.69/jour)
+2020: 653 842 domaines (54486.83/mois, 1791.35/jour)
+2021: 669 892 domaines (55824.33/mois, 1835.32/jour)
+2022: 680 212 domaines (56684.33/mois, 1863.59/jour)
+2023: 754 433 domaines (62869.42/mois, 2066.94/jour)
+2024: 787 154 domaines (65596.17/mois, 2156.59/jour)
+2025: 359 225 domaines (29935.42/mois, 984.18/jour)
+
+🔥 TOP 10 DES JOURS LES PLUS ACTIFS
+-----------------------------------
+1. mardi 3 juillet 2012: 5 027 domaines (5.2x la moyenne)
+2. mardi 29 mars 2011: 4 628 domaines (4.8x la moyenne)
+3. mardi 18 mai 2004: 4 490 domaines (4.6x la moyenne)
+4. mercredi 4 août 2021: 4 156 domaines (4.3x la moyenne)
+5. lundi 21 octobre 2024: 3 928 domaines (4.1x la moyenne)
+6. mardi 22 octobre 2024: 3 926 domaines (4.1x la moyenne)
+7. lundi 17 mai 2004: 3 913 domaines (4.0x la moyenne)
+8. vendredi 23 juin 2006: 3 623 domaines (3.7x la moyenne)
+9. jeudi 7 novembre 2024: 3 548 domaines (3.7x la moyenne)
+10. lundi 23 septembre 2024: 3 434 domaines (3.5x la moyenne)

@@ -67,9 +67,9 @@ if (!fs.existsSync(argv.input)) {
 console.log(`📥 Lecture du fichier: ${argv.input}`);
 
 const API_KEYS = [
-  process.env.API_KEY_1,
-  process.env.API_KEY_2,
-  process.env.API_KEY_3,
+  process.env.API_LIGHTHOUSE1,
+  process.env.API_LIGHTHOUSE2,
+  process.env.API_LIGHTHOUSE3,
 ].filter(Boolean);
 
 if (API_KEYS.length === 0) {

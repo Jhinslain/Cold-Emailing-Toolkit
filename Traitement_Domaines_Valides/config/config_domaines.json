@@ -1,0 +1,30 @@
+{
+  "input": {
+    "file": "data/data_extrait.csv",
+    "encoding": "utf8",
+    "delimiter": ";"
+  },
+  "output": {
+    "file": "output/domaines_valides.csv",
+    "encoding": "utf8"
+  },
+  "processing": {
+    "chunk_size": 10000,
+    "memory_limit_mb": 512,
+    "max_concurrent_chunks": 1
+  },
+  "columns": {
+    "domain_name": 0,
+    "withdrawal_date": 11
+  },
+  "validation": {
+    "skip_empty_lines": true,
+    "skip_malformed_lines": true,
+    "log_errors": true
+  },
+  "performance": {
+    "enable_progress_bar": true,
+    "progress_update_interval": 1000,
+    "temp_file_cleanup": true
+  }
+} 

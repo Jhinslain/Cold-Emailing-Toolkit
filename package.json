@@ -1,10 +1,10 @@
 {
   "name": "script",
   "version": "1.0.0",
-  "description": "",
+  "description": "Ce système permet d'analyser en masse les performances web et la validité des emails en utilisant plusieurs API en parallèle.",
   "license": "ISC",
   "author": "",
-  "type": "commonjs",
+  "type": "module",
   "main": "changement_hook.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -12,14 +12,31 @@
   "dependencies": {
     "axios": "^1.9.0",
     "bottleneck": "^2.19.5",
+    "cheerio": "^1.1.0",
     "csv-parse": "^5.6.0",
     "csv-parser": "^3.2.0",
     "csv-stringify": "^6.5.2",
     "csv-writer": "^1.6.0",
     "dotenv": "^16.5.0",
     "fast-csv": "^5.0.2",
+    "fs": "^0.0.1-security",
+    "iconv-lite": "^0.6.3",
+    "libphonenumber-js": "^1.12.9",
+    "node-fetch": "^3.3.2",
+    "node-stream-zip": "^1.15.0",
+    "p-limit": "^6.2.0",
     "path": "^0.12.7",
     "request": "^2.88.2",
+    "undici": "^7.10.0",
     "yargs": "github:yargs/yargs"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jhinslain/LeadsScoringLighthouse.git"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/Jhinslain/LeadsScoringLighthouse/issues"
+  },
+  "homepage": "https://github.com/Jhinslain/LeadsScoringLighthouse#readme"
 }
