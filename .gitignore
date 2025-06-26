@@ -7,6 +7,8 @@ package-lock.json
 
 *.zip
 
+data/
+
 # Fichiers de sortie ou temporaires
 output/
 results/
