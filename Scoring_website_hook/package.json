@@ -4,7 +4,6 @@
   "description": "Ce système permet d'analyser en masse les performances web et la validité des emails en utilisant plusieurs API en parallèle.",
   "license": "ISC",
   "author": "",
-  "type": "module",
   "main": "changement_hook.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
