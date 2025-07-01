@@ -262,5 +262,3 @@ Le package génère plusieurs fichiers selon les options utilisées :
 - **Statistiques** : Analyses détaillées de vos données
 
 ---
-
-**Développé avec ❤️ pour traiter efficacement vos données de domaines et extraire des contacts marketing précieux** 

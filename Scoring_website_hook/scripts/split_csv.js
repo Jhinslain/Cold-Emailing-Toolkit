@@ -3,7 +3,7 @@ const path = require('path');
 const csv = require('csv-parse/sync');
 const { stringify } = require('csv-stringify/sync');
 
-const CHUNK_SIZE = 600;
+const CHUNK_SIZE = 15000;
 
 function splitCSV(inputFile, outputDir) {
     // Lire le fichier CSV

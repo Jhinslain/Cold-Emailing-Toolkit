@@ -214,4 +214,3 @@ API_MILLION_VERIFIER3=votre_clé_3
 
 ---
 
-**🚀 Développé pour optimiser vos campagnes d'emailing et de phoning avec des données précises et des prospects qualifiés !**

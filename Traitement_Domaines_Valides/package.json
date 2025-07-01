@@ -14,17 +14,19 @@
     "launch": "lancer_traitement.bat"
   },
   "dependencies": {
-    "node-stream-zip": "^1.15.0",
-    "csv-parse": "^5.5.0",
-    "csv-stringify": "^6.4.0",
-    "libphonenumber-js": "^1.10.0",
+    "axios": "^1.6.0",
     "cheerio": "^1.0.0-rc.12",
-    "undici": "^5.0.0",
-    "node-fetch": "^3.3.0",
+    "csv-parse": "^5.5.0",
+    "csv-parser": "^3.2.0",
+    "csv-stringify": "^6.4.0",
+    "csv-writer": "^1.6.0",
     "dotenv": "^16.0.0",
-    "whois": "^2.13.5",
     "geoip-lite": "^1.4.7",
-    "axios": "^1.6.0"
+    "libphonenumber-js": "^1.10.0",
+    "node-fetch": "^3.3.0",
+    "node-stream-zip": "^1.15.0",
+    "undici": "^5.0.0",
+    "whois": "^2.13.5"
   },
   "keywords": [
     "domains",
@@ -50,4 +52,4 @@
     "url": "local"
   },
   "homepage": "local"
-} 
+}
