@@ -4,7 +4,7 @@ const readline = require('readline');
 
 // Configuration
 const INPUT_FILE = path.join(__dirname, '..', 'output', 'domaines_valides.csv');
-const OUTPUT_FILE = path.join(__dirname, '..', 'output', 'domaines_filtres_date.csv');
+// Le nom du fichier de sortie sera généré dynamiquement basé sur les dates
 
 // Fonction pour parser une date au format DD-MM-YYYY
 function parseDate(dateStr) {
@@ -30,10 +30,23 @@ function formatDate(date) {
     return `${day}-${month}-${year}`;
 }
 
+// Fonction pour générer le nom du fichier de sortie basé sur les dates
+function generateOutputFileName(startDate, endDate) {
+    const startDay = String(startDate.getDate()).padStart(2, '0');
+    const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
+    const startYear = startDate.getFullYear();
+    
+    const endDay = String(endDate.getDate()).padStart(2, '0');
+    const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
+    const endYear = endDate.getFullYear();
+    
+    // Format: YYYY_MM-DD_HH-MM_domains.csv
+    return `${startYear}_${startMonth}-${startDay}_${endMonth}-${endDay}_domains.csv`;
+}
+
 async function filterByDate(startDateStr, endDateStr) {
     console.log('📅 Filtrage des domaines par période spécifique...');
     console.log(`📁 Fichier d'entrée: ${INPUT_FILE}`);
-    console.log(`📁 Fichier de sortie: ${OUTPUT_FILE}`);
     
     try {
         // Parser les dates d'entrée
@@ -49,6 +62,11 @@ async function filterByDate(startDateStr, endDateStr) {
         const actualStartDate = startDate < endDate ? startDate : endDate;
         const actualEndDate = startDate < endDate ? endDate : startDate;
         
+        // Générer le nom du fichier de sortie
+        const outputFileName = generateOutputFileName(actualStartDate, actualEndDate);
+        const OUTPUT_FILE = path.join(__dirname, '..', 'output', outputFileName);
+        
+        console.log(`📁 Fichier de sortie: ${OUTPUT_FILE}`);
         console.log(`✅ Filtrage des domaines créés entre ${formatDate(actualStartDate)} et ${formatDate(actualEndDate)}`);
         console.log(`📅 Date de début: ${formatDate(actualStartDate)}`);
         console.log(`📅 Date de fin: ${formatDate(actualEndDate)}`);
