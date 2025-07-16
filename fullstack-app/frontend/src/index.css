@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Styles de base pour l'application */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #475569 0%, #1e293b 50%, #0f172a 100%);
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* Effet de particules en arrière-plan */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+      radial-gradient(circle at 20% 80%, rgba(100, 116, 139, 0.25) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(14, 165, 233, 0.18) 0%, transparent 50%),
+      radial-gradient(circle at 40% 40%, rgba(71, 85, 105, 0.13) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
+/* Composants personnalisés */
+@layer components {
+  .glass-card {
+    @apply bg-glass-100 backdrop-blur-lg border border-glass-200 shadow-glass-lg;
+    backdrop-filter: blur(18px) saturate(200%);
+  }
+
+  .glass-card-hover {
+    @apply hover:bg-glass-200 hover:shadow-glass-lg transition-all duration-300 hover:scale-[1.03];
+  }
+
+  .glass-button {
+    @apply bg-neutral-700 text-white font-medium border border-neutral-600 shadow-sm;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s ease;
+  }
+
+  .glass-button:hover {
+    @apply bg-neutral-600 shadow-md transform scale-[1.02];
+  }
+
+  .glass-button-primary {
+    @apply bg-gradient-to-r from-accent-500 to-accent-600 text-white font-medium border border-accent-600 shadow-sm;
+    backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
+  }
+
+  .glass-button-primary:hover {
+    @apply from-accent-600 to-accent-700 shadow-md transform scale-[1.02];
+  }
+
+  .glass-input {
+    @apply bg-white text-gray-900 placeholder-gray-500 border border-primary-200 font-medium;
+    backdrop-filter: blur(6px);
+  }
+
+  .glass-input:focus {
+    @apply bg-white border-primary-400 ring-2 ring-primary-400 outline-none;
+  }
+
+  .glass-modal {
+    @apply bg-neutral-800 backdrop-blur-2xl border border-neutral-600 shadow-2xl;
+    backdrop-filter: blur(28px) saturate(220%);
+  }
+
+  .floating-animation {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite alternate;
+  }
+}
+
+/* Animations personnalisées */
+@keyframes pulse-glow {
+  from {
+    text-shadow: 0 0 8px #fff, 0 0 16px #64748b;
+  }
+  to {
+    text-shadow: 0 0 16px #fff, 0 0 32px #64748b;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Classes d'animation utilitaires */
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out;
+}
+
+/* Effets pour le mode sélection */
+.selection-mode-active {
+  @apply ring-2 ring-accent-400 ring-offset-2 ring-offset-dark-600;
+  animation: selection-pulse 2s ease-in-out infinite;
+}
+
+@keyframes selection-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(14, 165, 233, 0);
+  }
+}
+
+/* Effets pour les cartes sélectionnées */
+.file-card-selected {
+  @apply ring-2 ring-accent-400 ring-offset-2 ring-offset-dark-600;
+  transform: scale(1.02);
+  transition: all 0.2s ease-in-out;
+}
+
+.file-card-selected:hover {
+  transform: scale(1.05);
+}
+
+/* Effets pour les boutons d'action en mode sélection */
+.selection-actions {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Effets pour les indicateurs de sélection */
+.selection-indicator {
+  transition: all 0.2s ease-in-out;
+}
+
+.selection-indicator.selected {
+  animation: scale-in 0.2s ease-out;
+}
+
+/* Scrollbar personnalisée */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Effets de focus améliorés */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid rgba(14, 165, 233, 0.7);
+  outline-offset: 2px;
+} 

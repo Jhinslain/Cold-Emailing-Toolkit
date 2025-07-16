@@ -1,0 +1,63 @@
+# Fichiers et dossiers à ignorer lors de la construction Docker
+
+# Dépendances
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+logs/
+*.log
+
+# Fichiers temporaires
+temp/
+tmp/
+.tmp/
+
+# Données
+backend/data/
+backend/temp/
+
+# Fichiers de développement
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Scripts de déploiement
+aws-deploy.sh
+deploy-to-instance.sh
+user-data.sh
+
+# Fichiers de sauvegarde
+*.tar.gz
+*.zip
+*.backup
+
+# Tests
+coverage/
+.nyc_output/
+
+# Build
+dist/
+build/ 
