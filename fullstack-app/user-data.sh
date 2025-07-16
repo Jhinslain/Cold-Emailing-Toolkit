@@ -38,7 +38,7 @@ mkdir -p /etc/domain-processor
 cat > /etc/nginx/sites-available/domain-processor << 'EOF'
 server {
     listen 80;
-    server_name _;
+    server_name domains.majoli.io;
 
     location / {
         proxy_pass http://localhost:3001;

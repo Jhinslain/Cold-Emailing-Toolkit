@@ -4,6 +4,8 @@ FROM node:18-alpine
 # Définir le répertoire de travail
 WORKDIR /app
 
+RUN apk add --no-cache curl
+
 # Copier les fichiers de configuration
 COPY package*.json ./
 COPY backend/package*.json ./backend/

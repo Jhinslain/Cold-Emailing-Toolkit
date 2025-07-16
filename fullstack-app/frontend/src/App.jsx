@@ -95,7 +95,7 @@ function App() {
 
   const fetchScriptsInfo = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/scripts/info');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/scripts/info`); 
       const data = await response.json();
       setScriptsInfo(data);
     } catch (error) {
@@ -105,7 +105,7 @@ function App() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/stats');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/stats`);
       const data = await response.json();
       setStats(data);
     } catch (error) {
@@ -115,7 +115,7 @@ function App() {
 
   const fetchFiles = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/files/list');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/list`);
       const data = await response.json();
       // Fusionner sans doublons (par nom de fichier)
       const allFiles = [...data.data, ...data.output];
@@ -165,7 +165,7 @@ function App() {
       setMetadataLoading(prev => ({ ...prev, [filename]: true }));
       
       // D'abord essayer de récupérer les métadonnées de base
-      const basicResponse = await fetch(`http://localhost:3001/api/files/metadata/${encodeURIComponent(filename)}?basic=true`);
+      const basicResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}?basic=true`);
       const basicData = await basicResponse.json();
       
       if (basicData.success) {
@@ -173,7 +173,7 @@ function App() {
         
         // Si le nombre de lignes n'est pas disponible, faire un appel complet
         if (!basicData.metadata.totalLines || basicData.metadata.totalLines === 0) {
-          const fullResponse = await fetch(`http://localhost:3001/api/files/metadata/${encodeURIComponent(filename)}`);
+          const fullResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}`);
           const fullData = await fullResponse.json();
           
           if (fullData.success) {
@@ -205,7 +205,7 @@ function App() {
     
     try {
       setMetadataLoading(prev => ({ ...prev, [filename]: true }));
-      const response = await fetch(`http://localhost:3001/api/files/metadata/${encodeURIComponent(filename)}`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}`);
       const data = await response.json();
       
       if (data.success) {
@@ -251,7 +251,7 @@ function App() {
         const file = files[i++];
         try {
           const response = await fetchWithTimeout(
-            `http://localhost:3001/api/files/metadata/${encodeURIComponent(file.name)}?basic=true`,
+            `${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(file.name)}?basic=true`,
             {},
             15000 // Timeout augmenté à 15s
           );
@@ -334,7 +334,7 @@ function App() {
     if (opendataLoading) return;
     setOpendataLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/opendata/download', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/opendata/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(opendataForm)
@@ -360,7 +360,7 @@ function App() {
   const handleDailyDownload = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/daily/download', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/daily/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dailyForm)
@@ -386,7 +386,7 @@ function App() {
   const handleDailyDomainsDownload = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/daily/domains/download', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/daily/domains/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dailyDomainsForm)
@@ -427,7 +427,7 @@ function App() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:3001/api/files/import', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/import`, {
         method: 'POST',
         body: formData
       });
@@ -461,7 +461,7 @@ function App() {
     
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/filter/date', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/filter/date`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -498,7 +498,7 @@ function App() {
     
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/filter/location', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/filter/location`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -618,7 +618,7 @@ function App() {
     setSelectedAction(`preview-${file.name}`);
     
     try {
-      const response = await fetch(`http://localhost:3001/api/files/preview/${encodeURIComponent(file.name)}`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/preview/${encodeURIComponent(file.name)}`);
       const data = await response.json();
       
       if (data.success) {
@@ -658,7 +658,7 @@ function App() {
     
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/files/delete', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: Array.from(selectedFiles) })
@@ -689,7 +689,7 @@ function App() {
     
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/files/merge', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/merge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: Array.from(selectedFiles) })
@@ -716,7 +716,7 @@ function App() {
   // Fonction pour télécharger un fichier
   const handleExport = (file) => {
     // Lien direct vers l'API de téléchargement (à adapter si besoin)
-    window.open(`http://localhost:3001/api/files/download/${encodeURIComponent(file.name)}`, '_blank');
+    window.open(`${import.meta.env.VITE_API_URL}/api/files/download/${encodeURIComponent(file.name)}`, '_blank');
   };
 
 
@@ -732,7 +732,7 @@ function App() {
     setDeleteLoading(true);
     try {
       console.log('Suppression en cours pour', fileToDelete.name);
-      const response = await fetch('http://localhost:3001/api/files/delete', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: [fileToDelete.name] })
@@ -769,7 +769,7 @@ function App() {
     }));
 
     // Ouvre la connexion SSE
-    const url = `http://localhost:3001/api/whois/analyze/stream?filename=${encodeURIComponent(file.name)}&jobId=${jobId}`;
+    const url = `${import.meta.env.VITE_API_URL}/api/whois/analyze/stream?filename=${encodeURIComponent(file.name)}&jobId=${jobId}`;
     eventSource = new window.EventSource(url);
 
     // On met à jour le state pour stocker l'eventSource
@@ -864,7 +864,7 @@ function App() {
     const isPersonalizedJob = job.logs && job.logs.some(log => log.includes('MESSAGES PERSONNALISÉS'));
     const apiEndpoint = isPersonalizedJob ? 'personalized-messages/generate/cancel' : 'whois/analyze/cancel';
     
-    await fetch(`http://localhost:3001/api/${apiEndpoint}`, {
+    await fetch(`${import.meta.env.VITE_API_URL}/api/${apiEndpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jobId: job.jobId })
@@ -882,7 +882,7 @@ function App() {
     const messageTemplate = prompt('Entrez votre template de message (utilisez {organisation} pour l\'organisation):', 'Bonjour {organisation}');
     if (!messageTemplate) return;
     try {
-      const response = await fetch('http://localhost:3001/api/personalized-messages/generate', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/personalized-messages/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: file.name, messageTemplate })
@@ -903,7 +903,7 @@ function App() {
   const handleUpdateAllDates = async () => {
     setDatesLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/dates/update-all', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dates/update-all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -927,7 +927,7 @@ function App() {
   // Fonction pour récupérer les statistiques des dates
   const fetchDatesStats = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/dates/stats');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dates/stats`);
       const data = await response.json();
       
       if (data.success) {
@@ -941,7 +941,7 @@ function App() {
   // Fonction pour mettre à jour les dates d'un fichier spécifique
   const handleUpdateFileDates = async (filename) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/dates/update/${encodeURIComponent(filename)}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dates/update/${encodeURIComponent(filename)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });

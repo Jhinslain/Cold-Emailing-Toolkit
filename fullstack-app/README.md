@@ -1,27 +1,94 @@
 # Application Fullstack React + Express
 
-## 🚀 Installation et lancement
+## 🚀 Déploiement complet sur AWS EC2
 
-### 1. Installation des dépendances
+### 📝 Historique des tâches réalisées
+
+1. **Création et configuration du serveur AWS**
+   - Création d’une instance EC2 Ubuntu sur AWS
+   - Génération et gestion d’une clé SSH pour se connecter au serveur
+   - Ouverture des ports nécessaires (22, 80, 443, 3001) dans le groupe de sécurité AWS
+   - Connexion SSH à l’instance EC2
+
+2. **Installation de l’environnement serveur**
+   - Installation de Docker, Docker Compose, Node.js, npm et utilitaires
+   - Nettoyage et gestion de l’espace disque
+
+3. **Déploiement de l’application**
+   - Transfert du dossier `fullstack-app` sur le serveur (sans les dossiers `node_modules`)
+   - Installation des dépendances backend et frontend avec `npm install`
+   - Construction et lancement de l’application avec Docker Compose
+   - Résolution des problèmes de build Docker (ex : installation de curl dans le conteneur)
+
+4. **Configuration du backend et du frontend**
+   - Backend modifié pour écouter sur `0.0.0.0` (et non `localhost`)
+   - Mise en place de la variable d’environnement `VITE_API_URL` dans le frontend pour différencier dev/prod
+   - Modification de tous les appels API dans le frontend pour utiliser cette variable
+
+5. **Mise en ligne et accès**
+   - Vérification de l’accessibilité du backend et du frontend
+   - Résolution des problèmes de connexion (CORS, localhost, etc.)
+
+6. **Mise en place d’un sous-domaine**
+   - Création du sous-domaine `domains.majoli.io` chez IONOS
+   - Ajout d’un enregistrement DNS de type A pointant vers l’IP du serveur AWS
+   - Configuration de Nginx pour servir l’application sur ce sous-domaine
+
+7. **Activation du HTTPS**
+   - Installation et configuration de Certbot (Let’s Encrypt) pour obtenir un certificat SSL gratuit
+   - Activation du HTTPS sur `domains.majoli.io` via Nginx
+   - Test d’accès sécurisé à l’application via https://domains.majoli.io
+
+---
+
+## 💻 Commandes utiles AWS/EC2
+
+### Connexion SSH
 ```bash
-# À la racine du projet
-npm run install-all
+ssh -i "C:\Users\levre\Documents\domainMajoli.pem" ubuntu@13.60.29.161
 ```
 
-### 2. Développement (hot reload)
+### Transfert du projet
 ```bash
-# À la racine du projet
-npm run dev
+scp -i "C:\Users\levre\Documents\domainMajoli.pem" -r "C:\Users\levre\Majoli\Marketing\SCRIPTS EMAILING PHONING\fullstack-app" ubuntu@13.60.29.161:~/
 ```
-- Frontend : http://localhost:5173
-- Backend : http://localhost:3001/api/hello
 
-### 3. Production
+### Installation des dépendances (sur le serveur)
 ```bash
-# À la racine du projet
-npm run start
+cd ~/fullstack-app/backend && npm install
+cd ~/fullstack-app/frontend && npm install
 ```
-- Application complète : http://localhost:3001
+
+### Docker Compose (build & lancement)
+```bash
+cd ~/fullstack-app
+sudo docker-compose down
+sudo docker-compose build --no-cache
+sudo docker-compose up -d
+sudo docker-compose ps
+```
+
+### Vérification de l’espace disque
+```bash
+df -h
+```
+
+### Nettoyage Docker (si besoin d’espace)
+```bash
+sudo docker system prune -a
+sudo docker volume prune -f
+```
+
+### Configuration Nginx (extrait)
+- Fichier : `/etc/nginx/sites-available/domain-processor`
+- Redirection HTTP → HTTPS et proxy vers le backend
+
+### Activation HTTPS avec Certbot
+```bash
+sudo certbot --nginx -d domains.majoli.io
+```
+
+---
 
 ## 📁 Structure
 ```

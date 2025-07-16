@@ -9,11 +9,24 @@ require('dotenv').config();
 
 // --- CONFIGURATION CORS ---
 const app = express();
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://domains.majoli.io',
+  'https://domains.majoli.io'
+];
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-  credentials: true
+  allowedHeaders: ['Content-Type']
 }));
 app.use(express.json());
 
@@ -1102,6 +1115,6 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Serveur backend sur http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Serveur backend sur http://0.0.0.0:${PORT} (accessible sur toutes les interfaces)`);
 }); 
