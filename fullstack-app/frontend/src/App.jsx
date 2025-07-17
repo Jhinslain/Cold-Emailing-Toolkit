@@ -23,6 +23,7 @@ import {
   ChatBubbleLeftRightIcon
 } from '@heroicons/react/24/outline';
 import { v4 as uuidv4 } from 'uuid';
+import Login from './Login.jsx';
 
 function App() {
   const [scriptsInfo, setScriptsInfo] = useState(null);
@@ -71,31 +72,117 @@ function App() {
   const [importLoading, setImportLoading] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
 
+  const [authenticated, setAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [elapsed, setElapsed] = useState(0);
+
+  // Ajout de la vérification d'authentification au chargement
   useEffect(() => {
-    fetchScriptsInfo();
-    fetchStats();
-    fetchFiles();
-    fetchDatesStats();
+    const checkAuth = async () => {
+      const sessionId = localStorage.getItem('sessionId');
+      if (!sessionId) {
+        setAuthenticated(false);
+        setCheckingAuth(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/status`, {
+          headers: { 'x-session-id': sessionId }
+        });
+        const data = await res.json();
+        setAuthenticated(!!data.authenticated);
+      } catch {
+        setAuthenticated(false);
+      } finally {
+        setCheckingAuth(false);
+      }
+    };
+    checkAuth();
   }, []);
 
-  // Effet pour charger les métadonnées des fichiers quand la liste change (seulement si nécessaire)
-  useEffect(() => {
-    if (files.length > 0 && files.length <= 10) {
-      // Vérifier si certains fichiers n'ont pas totalLines dans le registre
-      const filesWithoutLines = files.filter(file => !file.totalLines);
-      if (filesWithoutLines.length > 0) {
-        const timeoutId = setTimeout(() => {
-          fetchFileMetadata();
-        }, 500);
-        
-        return () => clearTimeout(timeoutId);
-      }
+  // Wrapper fetch pour ajouter le sessionId automatiquement
+  const authFetch = (url, options = {}) => {
+    const sessionId = localStorage.getItem('sessionId');
+    const headers = { ...(options.headers || {}), 'x-session-id': sessionId };
+    return fetch(url, { ...options, headers });
+  };
+
+  // Gestion de la déconnexion
+  const handleLogout = async () => {
+    const sessionId = localStorage.getItem('sessionId');
+    if (sessionId) {
+      await fetch(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'x-session-id': sessionId }
+      });
+      localStorage.removeItem('sessionId');
     }
-  }, [files]);
+    setAuthenticated(false);
+  };
+
+  // Effet pour charger les données de l'app quand authentifié
+  useEffect(() => {
+    if (authenticated) {
+      fetchScriptsInfo();
+      fetchStats();
+      fetchFiles();
+      fetchDatesStats();
+    }
+  }, [authenticated]);
+
+  // Effet pour charger les métadonnées des fichiers quand la liste change (seulement si nécessaire)
+  // DÉSACTIVÉ : Les métadonnées sont déjà disponibles dans le registre files-registry.json
+  // useEffect(() => {
+  //   if (authenticated && files.length > 0 && files.length <= 10) {
+  //     // Vérifier si certains fichiers n'ont pas totalLines dans le registre
+  //     const filesWithoutLines = files.filter(file => !file.totalLines);
+  //     if (filesWithoutLines.length > 0) {
+  //       const timeoutId = setTimeout(() => {
+  //         fetchFileMetadata();
+  //       }, 500);
+  //       
+  //       return () => clearTimeout(timeoutId);
+  //     }
+  //   }
+  // }, [files, authenticated]);
+
+  // Effet pour le timer des jobs Whois
+  useEffect(() => {
+    // Calcul dynamique des stats à partir des logs
+    let processed = 0, total = 0, emails = 0;
+    let isWhoisTerminal = false;
+    let whoisJob = null;
+    
+    if (Array.isArray(files)) {
+      files.forEach(file => {
+        const job = whoisJobs[file.name];
+        if (job && (job.inProgress || (job.logs && job.logs.length > 0))) {
+          isWhoisTerminal = true;
+          whoisJob = job;
+        }
+      });
+    }
+    
+    let timer;
+    if (isWhoisTerminal && whoisJob?.inProgress) {
+      timer = setInterval(() => setElapsed(e => e + 1), 1000);
+    } else {
+      setElapsed(0);
+    }
+    return () => clearInterval(timer);
+  }, [files, whoisJobs]);
+
+  // Si non authentifié, afficher la page de connexion
+  if (checkingAuth) {
+    return <div className="flex items-center justify-center min-h-screen text-white text-lg">Chargement...</div>;
+  }
+  if (!authenticated) {
+    return <Login onLogin={() => setAuthenticated(true)} />;
+  }
 
   const fetchScriptsInfo = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/scripts/info`); 
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/scripts/info`); 
       const data = await response.json();
       setScriptsInfo(data);
     } catch (error) {
@@ -105,7 +192,7 @@ function App() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/stats`);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/stats`);
       const data = await response.json();
       setStats(data);
     } catch (error) {
@@ -115,7 +202,7 @@ function App() {
 
   const fetchFiles = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/list`);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/list`);
       const data = await response.json();
       // Fusionner sans doublons (par nom de fichier)
       const allFiles = [...data.data, ...data.output];
@@ -165,7 +252,7 @@ function App() {
       setMetadataLoading(prev => ({ ...prev, [filename]: true }));
       
       // D'abord essayer de récupérer les métadonnées de base
-      const basicResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}?basic=true`);
+      const basicResponse = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}?basic=true`);
       const basicData = await basicResponse.json();
       
       if (basicData.success) {
@@ -173,7 +260,7 @@ function App() {
         
         // Si le nombre de lignes n'est pas disponible, faire un appel complet
         if (!basicData.metadata.totalLines || basicData.metadata.totalLines === 0) {
-          const fullResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}`);
+          const fullResponse = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}`);
           const fullData = await fullResponse.json();
           
           if (fullData.success) {
@@ -205,7 +292,7 @@ function App() {
     
     try {
       setMetadataLoading(prev => ({ ...prev, [filename]: true }));
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}`);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(filename)}`);
       const data = await response.json();
       
       if (data.success) {
@@ -227,103 +314,103 @@ function App() {
     }
   };
 
-  const fetchFileMetadata = async () => {
-    // Utilitaire pour fetch avec timeout plus long
-    function fetchWithTimeout(resource, options = {}, timeout = 15000) {
-      return Promise.race([
-        fetch(resource, options),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), timeout)
-        )
-      ]);
-    }
+  // FONCTION DÉSACTIVÉE : Les métadonnées sont déjà disponibles dans le registre files-registry.json
+  // const fetchFileMetadata = async () => {
+  //   // Utilitaire pour fetch avec timeout plus long
+  //   function fetchWithTimeout(resource, options = {}, timeout = 15000) {
+  //     return Promise.race([
+  //       fetch(resource, options),
+  //       new Promise((_, reject) =>
+  //         setTimeout(() => reject(new Error('Timeout')), timeout)
+  //       )
+  //     ]);
+  //   }
 
-    // Limite le nombre de requêtes simultanées (réduit de 3 à 2)
-    async function poolFetch(files, poolSize = 2) {
-      let i = 0;
-      let results = [];
-      let errors = 0;
-      const total = files.length;
-      const maxErrors = Math.ceil(total * 0.7); // Plus tolérant : 70% d'échecs autorisés
+  //   // Limite le nombre de requêtes simultanées (réduit de 3 à 2)
+  //   async function poolFetch(files, poolSize = 2) {
+  //     let i = 0;
+  //     let results = [];
+  //     let errors = 0;
+  //     const total = files.length;
+  //     const maxErrors = Math.ceil(total * 0.7); // Plus tolérant : 70% d'échecs autorisés
       
-      const next = async () => {
-        if (i >= files.length) return null;
-        const file = files[i++];
-        try {
-          const response = await fetchWithTimeout(
-            `${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(file.name)}?basic=true`,
-            {},
-            15000 // Timeout augmenté à 15s
-          );
-          const data = await response.json();
-          if (data.success) {
-            return { [file.name]: data.metadata };
-          } else {
-            errors++;
-            console.warn(`Métadonnées non disponibles pour ${file.name}`);
-            return null;
-          }
-        } catch (error) {
-          errors++;
-          console.warn(`Erreur lors du chargement des métadonnées pour ${file.name}:`, error.message);
-          return null;
-        }
-      };
+  //     const next = async () => {
+  //       if (i >= files.length) return null;
+  //       const file = files[i++];
+  //       try {
+  //           const response = await fetchWithTimeout(
+  //             `${import.meta.env.VITE_API_URL}/api/files/metadata/${encodeURIComponent(file.name)}?basic=true`,
+  //             {},
+  //             15s
+  //           );
+  //           const data = await response.json();
+  //           if (data.success) {
+  //             return { [file.name]: data.metadata };
+  //           } else {
+  //             errors++;
+  //             console.warn(`Métadonnées non disponibles pour ${file.name}`);
+  //             return null;
+  //           }
+  //         } catch (error) {
+  //           errors++;
+  //           console.warn(`Erreur lors du chargement des métadonnées pour ${file.name}:`, error.message);
+  //           return null;
+  //         }
+  //       };
       
-      const workers = Array(poolSize).fill(0).map(async () => {
-        let res;
-        let out = [];
-        while ((res = await next()) !== null) {
-          if (res) out.push(res);
-          if (errors > maxErrors) break;
-        }
-        return out;
-      });
+  //       const workers = Array(poolSize).fill(0).map(async () => {
+  //         let res;
+  //         let out = [];
+  //         while ((res = await next()) !== null) {
+  //           if (res) out.push(res);
+  //           if (errors > maxErrors) break;
+  //         }
+  //         return out;
+  //       });
       
-      const all = (await Promise.all(workers)).flat();
+  //       const all = (await Promise.all(workers)).flat();
       
-      // Afficher un message d'avertissement seulement si vraiment trop d'erreurs
-      if (errors > maxErrors) {
-        console.warn(`⚠️ ${errors}/${total} fichiers n'ont pas pu être chargés. L'interface reste fonctionnelle.`);
-      }
+  //       // Afficher un message d'avertissement seulement si vraiment trop d'erreurs
+  //       if (errors > maxErrors) {
+  //         console.warn(`⚠️ ${errors}/${total} fichiers n'ont pas pu être chargés. L'interface reste fonctionnelle.`);
+  //       }
       
-      return all;
-    }
+  //       return all;
+  //     }
 
-    try {
-      // Marquer tous les fichiers comme en cours de chargement
-      const loadingState = {};
-      files.forEach(file => {
-        loadingState[file.name] = true;
-      });
-      setMetadataLoading(loadingState);
+  //     try {
+  //       // Marquer tous les fichiers comme en cours de chargement
+  //       const loadingState = {};
+  //       files.forEach(file => {
+  //         loadingState[file.name] = true;
+  //       });
+  //       setMetadataLoading(loadingState);
 
-      // Utiliser le pool pour limiter les requêtes
-      const results = await poolFetch(files, 2); // Réduit à 2 requêtes simultanées
-      const newMetadata = {};
-      results.forEach(result => {
-        if (result) {
-          Object.assign(newMetadata, result);
-        }
-      });
-      setFileMetadata(prev => ({ ...prev, ...newMetadata }));
+  //       // Utiliser le pool pour limiter les requêtes
+  //       const results = await poolFetch(files, 2); // Réduit à 2 requêtes simultanées
+  //       const newMetadata = {};
+  //       results.forEach(result => {
+  //         if (result) {
+  //           Object.assign(newMetadata, result);
+  //       });
+  //       setFileMetadata(prev => ({ ...prev, ...newMetadata }));
 
-      // Marquer tous les fichiers comme chargés
-      const loadedState = {};
-      files.forEach(file => {
-        loadedState[file.name] = false;
-      });
-      setMetadataLoading(loadedState);
-    } catch (error) {
-      console.error('Erreur lors du chargement des métadonnées:', error);
-      // On ne bloque pas l'UI - on continue sans métadonnées
-      const loadedState = {};
-      files.forEach(file => {
-        loadedState[file.name] = false;
-      });
-      setMetadataLoading(loadedState);
-    }
-  };
+  //       // Marquer tous les fichiers comme chargés
+  //       const loadedState = {};
+  //       files.forEach(file => {
+  //         loadedState[file.name] = false;
+  //       });
+  //       setMetadataLoading(loadedState);
+  //     } catch (error) {
+  //       console.error('Erreur lors du chargement des métadonnées:', error);
+  //       // On ne bloque pas l'UI - on continue sans métadonnées
+  //       const loadedState = {};
+  //       files.forEach(file => {
+  //         loadedState[file.name] = false;
+  //       });
+  //       setMetadataLoading(loadedState);
+  //     }
+  //   };
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -334,7 +421,7 @@ function App() {
     if (opendataLoading) return;
     setOpendataLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/opendata/download`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/opendata/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(opendataForm)
@@ -360,7 +447,7 @@ function App() {
   const handleDailyDownload = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/daily/download`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/daily/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dailyForm)
@@ -386,7 +473,7 @@ function App() {
   const handleDailyDomainsDownload = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/daily/domains/download`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/daily/domains/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dailyDomainsForm)
@@ -427,7 +514,7 @@ function App() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/import`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/import`, {
         method: 'POST',
         body: formData
       });
@@ -461,7 +548,7 @@ function App() {
     
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/filter/date`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/filter/date`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -498,7 +585,7 @@ function App() {
     
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/filter/location`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/filter/location`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -618,7 +705,7 @@ function App() {
     setSelectedAction(`preview-${file.name}`);
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/preview/${encodeURIComponent(file.name)}`);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/preview/${encodeURIComponent(file.name)}`);
       const data = await response.json();
       
       if (data.success) {
@@ -658,7 +745,7 @@ function App() {
     
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/delete`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: Array.from(selectedFiles) })
@@ -689,7 +776,7 @@ function App() {
     
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/merge`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/merge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: Array.from(selectedFiles) })
@@ -732,7 +819,7 @@ function App() {
     setDeleteLoading(true);
     try {
       console.log('Suppression en cours pour', fileToDelete.name);
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/files/delete`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: [fileToDelete.name] })
@@ -769,7 +856,8 @@ function App() {
     }));
 
     // Ouvre la connexion SSE
-    const url = `${import.meta.env.VITE_API_URL}/api/whois/analyze/stream?filename=${encodeURIComponent(file.name)}&jobId=${jobId}`;
+    const sessionId = localStorage.getItem('sessionId');
+    const url = `${import.meta.env.VITE_API_URL}/api/whois/analyze/stream?filename=${encodeURIComponent(file.name)}&jobId=${jobId}&sessionId=${sessionId}`;
     eventSource = new window.EventSource(url);
 
     // On met à jour le state pour stocker l'eventSource
@@ -815,29 +903,59 @@ function App() {
     };
 
     eventSource.addEventListener('info', (e) => {
-      const data = JSON.parse(e.data);
-      addLog('info', data);
+      try {
+        const data = JSON.parse(e.data);
+        addLog('info', data);
+      } catch (error) {
+        console.error('Erreur parsing JSON info:', error, e.data);
+        addLog('error', { message: 'Erreur de parsing des données' });
+      }
     });
     eventSource.addEventListener('success', (e) => {
-      const data = JSON.parse(e.data);
-      addLog('success', data);
+      try {
+        const data = JSON.parse(e.data);
+        addLog('success', data);
+      } catch (error) {
+        console.error('Erreur parsing JSON success:', error, e.data);
+        addLog('error', { message: 'Erreur de parsing des données' });
+      }
     });
     eventSource.addEventListener('warn', (e) => {
-      const data = JSON.parse(e.data);
-      addLog('warn', data);
+      try {
+        const data = JSON.parse(e.data);
+        addLog('warn', data);
+      } catch (error) {
+        console.error('Erreur parsing JSON warn:', error, e.data);
+        addLog('error', { message: 'Erreur de parsing des données' });
+      }
     });
     eventSource.addEventListener('error', (e) => {
-      const data = JSON.parse(e.data);
-      addLog('error', data);
+      try {
+        const data = JSON.parse(e.data);
+        addLog('error', data);
+      } catch (error) {
+        console.error('Erreur parsing JSON error:', error, e.data);
+        addLog('error', { message: 'Erreur de parsing des données' });
+      }
       eventSource.close();
     });
     eventSource.addEventListener('stats', (e) => {
-      const data = JSON.parse(e.data);
-      addLog('stats', data);
+      try {
+        const data = JSON.parse(e.data);
+        addLog('stats', data);
+      } catch (error) {
+        console.error('Erreur parsing JSON stats:', error, e.data);
+        addLog('error', { message: 'Erreur de parsing des données' });
+      }
     });
     eventSource.addEventListener('done', (e) => {
-      const data = JSON.parse(e.data);
-      addLog('done', data);
+      try {
+        const data = JSON.parse(e.data);
+        addLog('done', data);
+      } catch (error) {
+        console.error('Erreur parsing JSON done:', error, e.data);
+        addLog('error', { message: 'Erreur de parsing des données' });
+      }
       eventSource.close();
     });
   };
@@ -864,7 +982,7 @@ function App() {
     const isPersonalizedJob = job.logs && job.logs.some(log => log.includes('MESSAGES PERSONNALISÉS'));
     const apiEndpoint = isPersonalizedJob ? 'personalized-messages/generate/cancel' : 'whois/analyze/cancel';
     
-    await fetch(`${import.meta.env.VITE_API_URL}/api/${apiEndpoint}`, {
+    await authFetch(`${import.meta.env.VITE_API_URL}/api/${apiEndpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jobId: job.jobId })
@@ -882,7 +1000,7 @@ function App() {
     const messageTemplate = prompt('Entrez votre template de message (utilisez {organisation} pour l\'organisation):', 'Bonjour {organisation}');
     if (!messageTemplate) return;
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/personalized-messages/generate`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/personalized-messages/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: file.name, messageTemplate })
@@ -899,11 +1017,36 @@ function App() {
     }
   };
 
+  const handleProcessYesterdayFile = async () => {
+    console.log('➡️  Requête traitement WHOIS fichier de la veille reçue');
+    try {
+      setLoading(true);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/whois/process-yesterday`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        showMessage('success', data.message);
+        fetchFiles();
+      } else {
+        const errorData = await response.json();
+        showMessage('error', `Erreur: ${errorData.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Erreur traitement WHOIS fichier de la veille:', error);
+      showMessage('error', `Erreur: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fonction pour mettre à jour toutes les dates dans le registre
   const handleUpdateAllDates = async () => {
     setDatesLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dates/update-all`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/dates/update-all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -927,7 +1070,7 @@ function App() {
   // Fonction pour récupérer les statistiques des dates
   const fetchDatesStats = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dates/stats`);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/dates/stats`);
       const data = await response.json();
       
       if (data.success) {
@@ -941,7 +1084,7 @@ function App() {
   // Fonction pour mettre à jour les dates d'un fichier spécifique
   const handleUpdateFileDates = async (filename) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dates/update/${encodeURIComponent(filename)}`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/dates/update/${encodeURIComponent(filename)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -980,13 +1123,11 @@ function App() {
     return false;
   }
 
-  // AVANT le return du composant (dans App ou le composant qui gère le terminal)
-  const [elapsed, setElapsed] = React.useState(0);
-
-  // Calcul dynamique des stats à partir des logs
+  // Calcul dynamique des stats à partir des logs pour l'affichage
   let processed = 0, total = 0, emails = 0;
   let isWhoisTerminal = false;
   let whoisJob = null;
+  
   if (Array.isArray(files)) {
     files.forEach(file => {
       const job = whoisJobs[file.name];
@@ -996,6 +1137,7 @@ function App() {
       }
     });
   }
+  
   if (isWhoisTerminal && whoisJob?.logs) {
     whoisJob.logs.forEach(l => {
       const m = l.match(/\[(\d+)[/|\\](\d+)\]/);
@@ -1013,15 +1155,26 @@ function App() {
   }
   const success = processed > 0 ? ((emails / processed) * 100).toFixed(1) : 0;
 
-  React.useEffect(() => {
-    let timer;
-    if (isWhoisTerminal && whoisJob?.inProgress) {
-      timer = setInterval(() => setElapsed(e => e + 1), 1000);
-    } else {
-      setElapsed(0);
+  const handleForceDailyAndWhois = async () => {
+    setLoading(true);
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/schedule/daily-whois`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+      if (data.success) {
+        showMessage('success', data.message || 'Téléchargement + WHOIS lancé avec succès !');
+        fetchFiles();
+      } else {
+        showMessage('error', data.error || 'Erreur lors du lancement du job');
+      }
+    } catch (error) {
+      showMessage('error', 'Erreur de connexion au serveur');
+    } finally {
+      setLoading(false);
     }
-    return () => clearInterval(timer);
-  }, [isWhoisTerminal, whoisJob?.inProgress]);
+  };
 
   return (
     <div className="min-h-screen relative">
@@ -1043,7 +1196,15 @@ function App() {
                 </p>
               </div>
             </div>
-            {/* BOUTON ACTUALISER SUPPRIMÉ */}
+            <button
+              onClick={handleLogout}
+              className="glass-button px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-neutral-600 transition-all duration-200"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Déconnexion
+            </button>
           </div>
         </div>
       </header>
@@ -1158,6 +1319,14 @@ function App() {
               >
                 <GlobeAltIcon className="h-6 w-6 mr-3" />
                 Télécharger Quotidien
+              </button>
+              <button
+                onClick={handleForceDailyAndWhois}
+                disabled={loading}
+                className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <InformationCircleIcon className="h-6 w-6 mr-3" />
+                {loading ? 'Traitement...' : 'Forcer Schedule'}
               </button>
             </div>
             {/* Bouton Import CSV à droite */}

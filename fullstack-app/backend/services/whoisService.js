@@ -466,12 +466,17 @@ class WhoisService {
                     console.log(`[WHOIS] Aucun contact trouvé pour: ${domain}`);
                 }
                 
-                results.push({ domain, email, phone });
+                results.push({ 
+                    domain, 
+                    email, 
+                    phone,
+                    analyzer: analyzer // Stocker l'analyseur complet avec tous les résultats
+                });
                 
             } catch (error) {
                 stats.errors++;
                 console.log(`[WHOIS] Erreur pour ${domain}: ${error.message}`);
-                results.push({ domain, email: '', phone: '' });
+                results.push({ domain, email: '', phone: '', analyzer: null });
             }
             
             // Afficher les statistiques tous les 100 domaines ou à la fin
@@ -497,20 +502,29 @@ class WhoisService {
             const csvLines = [csvHeaders.join(',')];
             for (let i = 0; i < results.length; i++) {
                 const row = results[i];
-                // Chercher les infos enrichies dans analyzer.results (on suppose que results[i] = { domain, email, phone })
-                // On va relancer l'analyseur pour chaque domaine pour récupérer les infos enrichies (sinon il faut stocker analyzer.results à chaque tour)
-                // Pour l'efficacité, on va stocker analyzer.results enrichis dans results
-                const analyzer = new WhoisAnalyzer(row.domain);
-                await analyzer.analyze();
-                const rdap = analyzer.results.rdap_info || {};
-                const whois = analyzer.results.whois_info || {};
+                // Utiliser les résultats déjà calculés (plus besoin de relancer l'analyse)
+                const rdap = row.analyzer?.results.rdap_info || {};
+                const whois = row.analyzer?.results.whois_info || {};
                 // Champs enrichis (priorité RDAP, fallback WHOIS)
-                const street = rdap.address || whois.address || '';
-                const city = rdap.city || rdap.locality || '';
-                const postal = rdap.postalCode || '';
-                const region = rdap.region || '';
-                const country = rdap.country || '';
-                const org = rdap.organization || whois.registrar || '';
+                let street = '', city = '', postal = '', region = '', country = '', org = '';
+                // RDAP (vCard)
+                if (rdap.address) {
+                    if (Array.isArray(rdap.address)) {
+                        // vCard adr: ['', '', '57 rue du general de gaulle', 'enghien les bains', '', '95880', 'FR']
+                        street = rdap.address[2] || '';
+                        city = rdap.address[3] || '';
+                        region = rdap.address[4] || '';
+                        postal = rdap.address[5] || '';
+                        country = rdap.address[6] || '';
+                    } else if (typeof rdap.address === 'string') {
+                        // fallback: tout dans street
+                        street = rdap.address;
+                    }
+                } else if (whois.address) {
+                    // WHOIS: généralement une chaîne
+                    street = whois.address;
+                }
+                org = rdap.organization || whois.registrar || '';
                 csvLines.push([
                     row.domain,
                     row.email,

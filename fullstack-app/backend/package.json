@@ -21,7 +21,8 @@
     "node-fetch": "^2.7.0",
     "node-stream-zip": "^1.15.0",
     "uuid": "^11.1.0",
-    "whois": "^2.15.0"
+    "whois": "^2.15.0",
+    "bcrypt": "^5.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"

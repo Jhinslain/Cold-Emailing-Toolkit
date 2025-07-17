@@ -69,7 +69,9 @@ sudo docker-compose ps
 ```
 
 ### Vérification de l’espace disque
+
 ```bash
+watch -n 2 df -h
 df -h
 ```
 
@@ -77,6 +79,16 @@ df -h
 ```bash
 sudo docker system prune -a
 sudo docker volume prune -f
+```
+
+```bash
+sudo rm -rf ~/.local/share/Trash/*
+sudo rm -rf /tmp/*
+```
+
+
+```bash
+cat /etc/nginx/sites-available/domain-processor
 ```
 
 ### Configuration Nginx (extrait)

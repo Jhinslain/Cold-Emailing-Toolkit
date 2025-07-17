@@ -411,6 +411,34 @@ async function probeDomainOptimized(domain, mode = 'full') {
   return result;
 }
 
+/** Fonction pour parser les adresses RDAP au format texte */
+function parseRdapAddressText(addressText) {
+  if (!addressText || typeof addressText !== 'string') {
+    return {
+      street: 'N/A',
+      city: 'N/A',
+      postal_code: 'N/A',
+      region: 'N/A',
+      country: 'N/A'
+    };
+  }
+
+  // Format attendu: ",,10 C Rue Du Moulin,Lespinasse,,31150,FR"
+  const parts = addressText.split(',');
+  
+  // Nettoyer les parties (supprimer les espaces et guillemets)
+  const cleanParts = parts.map(part => part.trim().replace(/^["']|["']$/g, ''));
+  
+  // Format vCard: [PO Box, Extended Address, Street, Locality, Region, Postal Code, Country]
+  return {
+    street: cleanParts[2] || 'N/A',        // Index 2: Street
+    city: cleanParts[3] || 'N/A',          // Index 3: Locality/City
+    region: cleanParts[4] || 'N/A',        // Index 4: Region
+    postal_code: cleanParts[5] || 'N/A',   // Index 5: Postal Code
+    country: cleanParts[6] || 'N/A'        // Index 6: Country
+  };
+}
+
 /** Fonction pour extraire toutes les informations WHOIS */
 function extractWhoisInfo(entity, vcard = null) {
   const whois = {};
@@ -435,6 +463,17 @@ function extractWhoisInfo(entity, vcard = null) {
       whois.postalCode = adr[5] || 'N/A'; // Postal Code
       whois.country = adr[6] || 'N/A'; // Country
       whois.countryCode = adr[6] || 'N/A'; // Country Code
+    } else if (adr && typeof adr === 'string') {
+      // Si l'adresse est au format texte, la parser
+      console.log(`    📍 Adresse RDAP texte trouvée: ${adr}`);
+      const parsedAddress = parseRdapAddressText(adr);
+      whois.street1 = parsedAddress.street;
+      whois.locality = parsedAddress.city;
+      whois.region = parsedAddress.region;
+      whois.postalCode = parsedAddress.postal_code;
+      whois.country = parsedAddress.country;
+      whois.countryCode = parsedAddress.country;
+      console.log(`    ✅ Adresse parsée: ${parsedAddress.street}, ${parsedAddress.city}, ${parsedAddress.postal_code}, ${parsedAddress.country}`);
     }
   }
   
@@ -449,6 +488,34 @@ function extractWhoisInfo(entity, vcard = null) {
     whois.postalCode = addr.postalCode || whois.postalCode || 'N/A';
     whois.country = addr.country || whois.country || 'N/A';
     whois.countryCode = addr.countryCode || whois.countryCode || 'N/A';
+  }
+  
+  // Chercher des adresses RDAP au format texte dans d'autres champs
+  if (!whois.street1 || whois.street1 === 'N/A') {
+    // Chercher dans les champs possibles qui pourraient contenir l'adresse
+    const possibleAddressFields = [
+      entity.address_text,
+      entity.address_string,
+      entity.rdap_address,
+      entity.whois_address
+    ];
+    
+    for (const addressField of possibleAddressFields) {
+      if (addressField && typeof addressField === 'string' && addressField.includes(',')) {
+        console.log(`    📍 Adresse RDAP texte trouvée dans autre champ: ${addressField}`);
+        const parsedAddress = parseRdapAddressText(addressField);
+        if (parsedAddress.street !== 'N/A') {
+          whois.street1 = parsedAddress.street;
+          whois.locality = parsedAddress.city;
+          whois.region = parsedAddress.region;
+          whois.postalCode = parsedAddress.postal_code;
+          whois.country = parsedAddress.country;
+          whois.countryCode = parsedAddress.country;
+          console.log(`    ✅ Adresse parsée: ${parsedAddress.street}, ${parsedAddress.city}, ${parsedAddress.postal_code}, ${parsedAddress.country}`);
+          break;
+        }
+      }
+    }
   }
   
   // Autres informations

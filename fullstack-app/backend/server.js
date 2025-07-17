@@ -5,6 +5,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
+const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 // --- CONFIGURATION CORS ---
@@ -26,10 +27,224 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type', 'x-session-id']
 }));
 app.use(express.json());
 
+// --- SYSTÈME D'AUTHENTIFICATION ---
+// Stockage simple des sessions (en production, utilisez Redis ou une base de données)
+const sessions = new Map();
+
+// Système de limitation de tentatives de connexion
+const loginAttempts = new Map();
+const MAX_LOGIN_ATTEMPTS = 5; // Nombre maximum de tentatives
+const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes en millisecondes
+
+// Mot de passe configuré via variable d'environnement ou par défaut
+const HASHED_PASSWORD = process.env.HASHED_PASSWORD || null;
+
+// Middleware d'authentification
+const requireAuth = (req, res, next) => {
+  const sessionId = req.headers['x-session-id'];
+  
+  if (!sessionId || !sessions.has(sessionId)) {
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Authentification requise',
+      requiresAuth: true 
+    });
+  }
+  
+  // Vérifier si la session n'a pas expiré (24h)
+  const session = sessions.get(sessionId);
+  const now = Date.now();
+  if (now - session.createdAt > 24 * 60 * 60 * 1000) {
+    sessions.delete(sessionId);
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Session expirée',
+      requiresAuth: true 
+    });
+  }
+  
+  next();
+};
+
+// Route de connexion
+app.post('/api/auth/login', async (req, res) => {
+  const { password } = req.body;
+  
+  if (!password) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Mot de passe requis' 
+    });
+  }
+
+  // Obtenir l'IP du client pour la limitation de tentatives
+  const clientIP = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
+  
+  // Vérifier si l'IP est bloquée
+  const attemptData = loginAttempts.get(clientIP);
+  const now = Date.now();
+  
+  if (attemptData && attemptData.blockedUntil && now < attemptData.blockedUntil) {
+    const remainingTime = Math.ceil((attemptData.blockedUntil - now) / 1000 / 60);
+    return res.status(429).json({ 
+      success: false, 
+      error: `Trop de tentatives échouées. Réessayez dans ${remainingTime} minutes.`,
+      blocked: true,
+      remainingMinutes: remainingTime
+    });
+  }
+  
+  // Vérifier le mot de passe (avec hachage)
+  let isValid = false;
+  if (HASHED_PASSWORD) {
+    // Utiliser le mot de passe hashé
+    isValid = await bcrypt.compare(password, HASHED_PASSWORD);
+  } else {
+    // Aucun mot de passe configuré
+    console.error('❌ HASHED_PASSWORD non configuré dans les variables d\'environnement');
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Configuration d\'authentification manquante' 
+    });
+  }
+  
+  if (!isValid) {
+    // Incrémenter le compteur de tentatives échouées
+    const currentAttempts = attemptData ? attemptData.count : 0;
+    const newCount = currentAttempts + 1;
+    
+    if (newCount >= MAX_LOGIN_ATTEMPTS) {
+      // Bloquer l'IP
+      loginAttempts.set(clientIP, {
+        count: newCount,
+        blockedUntil: now + LOCKOUT_DURATION,
+        lastAttempt: now
+      });
+      
+      console.log(`🚫 IP ${clientIP} bloquée pour ${LOCKOUT_DURATION / 1000 / 60} minutes après ${MAX_LOGIN_ATTEMPTS} tentatives échouées`);
+      
+      return res.status(429).json({ 
+        success: false, 
+        error: `Trop de tentatives échouées. Réessayez dans ${LOCKOUT_DURATION / 1000 / 60} minutes.`,
+        blocked: true,
+        remainingMinutes: LOCKOUT_DURATION / 1000 / 60
+      });
+    } else {
+      // Mettre à jour le compteur
+      loginAttempts.set(clientIP, {
+        count: newCount,
+        blockedUntil: null,
+        lastAttempt: now
+      });
+      
+      console.log(`⚠️ Tentative de connexion échouée pour IP ${clientIP} (${newCount}/${MAX_LOGIN_ATTEMPTS})`);
+      
+      return res.status(401).json({ 
+        success: false, 
+        error: `Mot de passe incorrect. Tentative ${newCount}/${MAX_LOGIN_ATTEMPTS}`,
+        attemptsRemaining: MAX_LOGIN_ATTEMPTS - newCount
+      });
+    }
+  }
+  
+  // Connexion réussie - réinitialiser le compteur de tentatives
+  loginAttempts.delete(clientIP);
+  
+  // Créer une nouvelle session
+  const sessionId = uuidv4();
+  sessions.set(sessionId, {
+    id: sessionId,
+    createdAt: Date.now(),
+    authenticated: true
+  });
+  
+  console.log(`✅ Connexion réussie pour IP ${clientIP}`);
+  
+  res.json({ 
+    success: true, 
+    message: 'Connexion réussie',
+    sessionId: sessionId
+  });
+});
+
+// Route de déconnexion
+app.post('/api/auth/logout', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  
+  if (sessionId && sessions.has(sessionId)) {
+    sessions.delete(sessionId);
+  }
+  
+  res.json({ 
+    success: true, 
+    message: 'Déconnexion réussie' 
+  });
+});
+
+// Route pour vérifier l'état de l'authentification
+app.get('/api/auth/status', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  
+  if (!sessionId || !sessions.has(sessionId)) {
+    return res.json({ 
+      authenticated: false 
+    });
+  }
+  
+  const session = sessions.get(sessionId);
+  const now = Date.now();
+  
+  if (now - session.createdAt > 24 * 60 * 60 * 1000) {
+    sessions.delete(sessionId);
+    return res.json({ 
+      authenticated: false 
+    });
+  }
+  
+  res.json({ 
+    authenticated: true 
+  });
+});
+
+// Route pour vérifier le statut de blocage d'une IP
+app.get('/api/auth/block-status', (req, res) => {
+  const clientIP = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
+  const attemptData = loginAttempts.get(clientIP);
+  const now = Date.now();
+  
+  if (attemptData && attemptData.blockedUntil && now < attemptData.blockedUntil) {
+    const remainingTime = Math.ceil((attemptData.blockedUntil - now) / 1000 / 60);
+    return res.json({
+      blocked: true,
+      remainingMinutes: remainingTime,
+      attemptsUsed: attemptData.count
+    });
+  }
+  
+  res.json({
+    blocked: false,
+    attemptsUsed: attemptData ? attemptData.count : 0,
+    attemptsRemaining: MAX_LOGIN_ATTEMPTS - (attemptData ? attemptData.count : 0)
+  });
+});
+
+// Route de debug pour vérifier l'état des sessions
+app.get('/api/auth/debug-sessions', (req, res) => {
+  const sessionList = Array.from(sessions.entries()).map(([id, session]) => ({
+    id,
+    createdAt: new Date(session.createdAt).toISOString(),
+    age: Math.floor((Date.now() - session.createdAt) / 1000 / 60) + ' minutes'
+  }));
+  
+  res.json({
+    totalSessions: sessions.size,
+    sessions: sessionList
+  });
+});
 
 // Import des services
 const OpendataService = require('./services/opendataService');
@@ -90,7 +305,7 @@ app.get('/api/hello', (req, res) => {
 });
 
 // Route pour obtenir les informations sur les scripts disponibles
-app.get('/api/scripts/info', (req, res) => {
+app.get('/api/scripts/info', requireAuth, (req, res) => {
   const scriptsInfo = {
     opendata: {
       name: "Télécharger l'Opendata Afnic",
@@ -133,7 +348,7 @@ app.get('/api/scripts/info', (req, res) => {
 });
 
 // Route pour télécharger l'Opendata Afnic
-app.post('/api/opendata/download', async (req, res) => {
+app.post('/api/opendata/download', requireAuth, async (req, res) => {
   try {
     const { mode, month } = req.body;
     
@@ -172,7 +387,7 @@ app.post('/api/opendata/download', async (req, res) => {
 });
 
 // Route pour télécharger les fichiers quotidiens
-app.post('/api/daily/download', async (req, res) => {
+app.post('/api/daily/download', requireAuth, async (req, res) => {
   try {
     const { mode, days } = req.body;
     
@@ -200,7 +415,7 @@ app.post('/api/daily/download', async (req, res) => {
 });
 
 // Route pour télécharger les domaines quotidiens avec conversion automatique
-app.post('/api/daily/domains/download', async (req, res) => {
+app.post('/api/daily/domains/download', requireAuth, async (req, res) => {
   try {
     const { mode, days } = req.body;
     if (mode === 'custom' && (!days || days < 1 || days > 30)) {
@@ -223,7 +438,7 @@ app.post('/api/daily/domains/download', async (req, res) => {
 });
 
 // Route pour traiter les domaines valides
-app.post('/api/domains/process', async (req, res) => {
+app.post('/api/domains/process', requireAuth, async (req, res) => {
   try {
     const { mode } = req.body;
     
@@ -247,7 +462,7 @@ app.post('/api/domains/process', async (req, res) => {
 });
 
 // Route pour lister les fichiers disponibles
-app.get('/api/files/list', (req, res) => {
+app.get('/api/files/list', requireAuth, (req, res) => {
   try {
     const dataFiles = fileService.getDataFiles();
     const outputFiles = fileService.getOutputFiles();
@@ -269,7 +484,7 @@ app.get('/api/files/list', (req, res) => {
 });
 
 // Route pour obtenir les statistiques
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', requireAuth, (req, res) => {
   try {
     const stats = fileService.getAllStats();
     res.json(stats);
@@ -284,7 +499,7 @@ app.get('/api/stats', (req, res) => {
 });
 
 // Route pour obtenir les statistiques détaillées
-app.get('/api/stats/detailed', (req, res) => {
+app.get('/api/stats/detailed', requireAuth, (req, res) => {
   try {
     const stats = fileService.getDetailedStats();
     res.json(stats);
@@ -299,7 +514,7 @@ app.get('/api/stats/detailed', (req, res) => {
 });
 
 // Route pour obtenir les dates disponibles pour les fichiers quotidiens
-app.get('/api/daily/dates', (req, res) => {
+app.get('/api/daily/dates', requireAuth, (req, res) => {
   try {
     const dates = dailyService.getAvailableDates();
     res.json({ dates });
@@ -314,7 +529,7 @@ app.get('/api/daily/dates', (req, res) => {
 });
 
 // Route pour obtenir les statistiques des fichiers quotidiens
-app.get('/api/daily/stats', (req, res) => {
+app.get('/api/daily/stats', requireAuth, (req, res) => {
   try {
     const stats = dailyService.getDailyStats();
     res.json(stats);
@@ -329,7 +544,7 @@ app.get('/api/daily/stats', (req, res) => {
 });
 
 // Route pour obtenir un aperçu d'un fichier CSV
-app.get('/api/files/preview/:filename', async (req, res) => {
+app.get('/api/files/preview/:filename', requireAuth, async (req, res) => {
   try {
     const { filename } = req.params;
     const { lines = 10 } = req.query;
@@ -353,7 +568,7 @@ app.get('/api/files/preview/:filename', async (req, res) => {
 });
 
 // Route pour obtenir les colonnes d'un fichier CSV
-app.get('/api/files/columns/:filename', async (req, res) => {
+app.get('/api/files/columns/:filename', requireAuth, async (req, res) => {
   try {
     const { filename } = req.params;
     
@@ -376,7 +591,7 @@ app.get('/api/files/columns/:filename', async (req, res) => {
 });
 
 // Route pour obtenir les métadonnées d'un fichier CSV (nombre de lignes, colonnes, etc.)
-app.get('/api/files/metadata/:filename', async (req, res) => {
+app.get('/api/files/metadata/:filename', requireAuth, async (req, res) => {
   try {
     const { filename } = req.params;
     const { basic } = req.query; // Paramètre pour obtenir seulement les métadonnées de base
@@ -441,7 +656,7 @@ app.get('/api/files/metadata/:filename', async (req, res) => {
 });
 
 // Route pour importer un fichier CSV
-app.post('/api/files/import', upload.single('file'), async (req, res) => {
+app.post('/api/files/import', requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ 
@@ -509,7 +724,7 @@ app.post('/api/files/import', upload.single('file'), async (req, res) => {
 });
 
 // Route pour supprimer plusieurs fichiers
-app.post('/api/files/delete', async (req, res) => {
+app.post('/api/files/delete', requireAuth, async (req, res) => {
   try {
     const { files } = req.body;
     
@@ -596,7 +811,7 @@ app.post('/api/files/delete', async (req, res) => {
 });
 
 // Route pour fusionner plusieurs fichiers
-app.post('/api/files/merge', async (req, res) => {
+app.post('/api/files/merge', requireAuth, async (req, res) => {
   try {
     const { files } = req.body;
     
@@ -627,7 +842,7 @@ app.post('/api/files/merge', async (req, res) => {
 });
 
 // Route pour télécharger un fichier
-app.get('/api/files/download/:filename', (req, res) => {
+app.get('/api/files/download/:filename', requireAuth, (req, res) => {
   const { filename } = req.params;
   const filePath = path.join(fileService.dataDir, filename);
 
@@ -638,7 +853,7 @@ app.get('/api/files/download/:filename', (req, res) => {
 });
 
 // Route pour obtenir toutes les catégories
-app.get('/api/categories', (req, res) => {
+app.get('/api/categories', requireAuth, (req, res) => {
   try {
     const categories = fileService.getAllCategories();
     res.json({ success: true, categories });
@@ -652,7 +867,7 @@ app.get('/api/categories', (req, res) => {
 });
 
 // Route pour obtenir le registre complet des fichiers
-app.get('/api/files/registry', (req, res) => {
+app.get('/api/files/registry', requireAuth, (req, res) => {
   try {
     const registry = fileService.loadFilesRegistry();
     res.json({ success: true, registry });
@@ -666,7 +881,7 @@ app.get('/api/files/registry', (req, res) => {
 });
 
 // Route pour synchroniser le registre
-app.post('/api/files/sync', (req, res) => {
+app.post('/api/files/sync', requireAuth, (req, res) => {
   try {
     const registry = fileService.syncRegistry();
     res.json({ 
@@ -684,7 +899,7 @@ app.post('/api/files/sync', (req, res) => {
 });
 
 // Route pour mettre à jour les métadonnées d'un fichier
-app.post('/api/files/update-metadata/:filename', async (req, res) => {
+app.post('/api/files/update-metadata/:filename', requireAuth, async (req, res) => {
   try {
     const { filename } = req.params;
     const success = await fileService.updateFileMetadata(filename);
@@ -710,7 +925,7 @@ app.post('/api/files/update-metadata/:filename', async (req, res) => {
 });
 
 // Route pour définir la catégorie d'un fichier
-app.post('/api/files/category', (req, res) => {
+app.post('/api/files/category', requireAuth, (req, res) => {
   try {
     const { filename, category } = req.body;
     
@@ -746,7 +961,7 @@ app.post('/api/files/category', (req, res) => {
 });
 
 // Route pour obtenir les fichiers par catégorie
-app.get('/api/categories/:category', (req, res) => {
+app.get('/api/categories/:category', requireAuth, (req, res) => {
   try {
     const { category } = req.params;
     
@@ -767,7 +982,7 @@ app.get('/api/categories/:category', (req, res) => {
 });
 
 // Route pour filtrer par date
-app.post('/api/filter/date', async (req, res) => {
+app.post('/api/filter/date', requireAuth, async (req, res) => {
   try {
     const { filename, startDate, endDate } = req.body;
     
@@ -818,7 +1033,7 @@ app.post('/api/filter/date', async (req, res) => {
 });
 
 // Route pour obtenir les colonnes d'un fichier (diagnostic)
-app.get('/api/files/columns/:filename', async (req, res) => {
+app.get('/api/files/columns/:filename', requireAuth, async (req, res) => {
   try {
     const { filename } = req.params;
     const inputFile = path.join(fileService.dataDir, filename);
@@ -849,7 +1064,7 @@ app.get('/api/files/columns/:filename', async (req, res) => {
 });
 
 // Route pour filtrer par localisation
-app.post('/api/filter/location', async (req, res) => {
+app.post('/api/filter/location', requireAuth, async (req, res) => {
   try {
     const { filename, filterType, filterValue } = req.body;
     
@@ -924,7 +1139,7 @@ app.post('/api/filter/location', async (req, res) => {
 });
 
 // Route pour analyser un fichier CSV de domaines avec WHOIS
-app.post('/api/whois/analyze', async (req, res) => {
+app.post('/api/whois/analyze', requireAuth, async (req, res) => {
   console.log('➡️  Requête WHOIS reçue', req.body);
   try {
     const { filename } = req.body;
@@ -941,11 +1156,38 @@ app.post('/api/whois/analyze', async (req, res) => {
 
 // Endpoint SSE pour logs en temps réel du traitement Whois
 app.get('/api/whois/analyze/stream', async (req, res) => {
-  const { filename, jobId } = req.query;
+  const { filename, jobId, sessionId } = req.query;
   if (!filename || !jobId) {
     res.status(400).end();
     return;
   }
+  
+  // Vérifier l'authentification via sessionId dans les paramètres
+  console.log(`🔍 Vérification sessionId: ${sessionId}`);
+  console.log(`📊 Sessions disponibles: ${sessions.size}`);
+  console.log(`🔑 Session existe: ${sessions.has(sessionId)}`);
+  
+  if (!sessionId || !sessions.has(sessionId)) {
+    console.log(`❌ Session invalide ou inexistante: ${sessionId}`);
+    res.status(401).end();
+    return;
+  }
+  
+  // Vérifier si la session n'a pas expiré (24h)
+  const session = sessions.get(sessionId);
+  const now = Date.now();
+  console.log(`⏰ Session créée: ${new Date(session.createdAt).toISOString()}`);
+  console.log(`⏰ Maintenant: ${new Date(now).toISOString()}`);
+  console.log(`⏰ Différence: ${(now - session.createdAt) / 1000 / 60} minutes`);
+  
+  if (now - session.createdAt > 24 * 60 * 60 * 1000) {
+    console.log(`❌ Session expirée: ${sessionId}`);
+    sessions.delete(sessionId);
+    res.status(401).end();
+    return;
+  }
+  
+  console.log(`✅ Session valide: ${sessionId}`);
   
   console.log(`🌐 Début SSE WHOIS - filename: ${filename}, jobId: ${jobId}`);
   
@@ -984,7 +1226,7 @@ app.post('/api/whois/analyze/cancel', (req, res) => {
 });
 
 // Route pour générer des messages personnalisés
-app.post('/api/personalized-messages/generate', async (req, res) => {
+app.post('/api/personalized-messages/generate', requireAuth, async (req, res) => {
   console.log('➡️  Requête messages personnalisés reçue', req.body);
   try {
     const { filename, messageTemplate } = req.body;
@@ -1012,7 +1254,7 @@ app.post('/api/personalized-messages/generate', async (req, res) => {
 });
 
 // Endpoint SSE pour logs en temps réel du traitement des messages personnalisés
-app.get('/api/personalized-messages/generate/stream', async (req, res) => {
+app.get('/api/personalized-messages/generate/stream', requireAuth, async (req, res) => {
   const { filename, messageTemplate, jobId } = req.query;
   if (!filename || !messageTemplate || !jobId) {
     res.status(400).end();
@@ -1053,6 +1295,42 @@ app.post('/api/personalized-messages/generate/cancel', (req, res) => {
   }
   personalizedMessageService.cancelJob(jobId);
   res.json({ success: true });
+});
+
+// Route pour déclencher manuellement le traitement WHOIS du fichier de la veille
+app.post('/api/whois/process-yesterday', requireAuth, async (req, res) => {
+  console.log('➡️  Requête traitement WHOIS fichier de la veille reçue');
+  try {
+    await scheduler.triggerJob('whois', { yesterday: true });
+    res.json({ 
+      success: true, 
+      message: 'Traitement WHOIS du fichier de la veille lancé avec succès' 
+    });
+  } catch (error) {
+    console.error('❌ Erreur traitement WHOIS fichier de la veille:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Route pour forcer le schedule (téléchargement + WHOIS)
+app.post('/api/schedule/daily-whois', requireAuth, async (req, res) => {
+  console.log('➡️  Requête forcer schedule (téléchargement + WHOIS) reçue');
+  try {
+    await scheduler.triggerJob('dailyAndWhois');
+    res.json({ 
+      success: true, 
+      message: 'Téléchargement + WHOIS lancé avec succès !' 
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors du lancement du schedule:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
 });
 
 // Routes pour la gestion des dates dans le registre
@@ -1106,6 +1384,13 @@ app.get('/api/dates/stats', (req, res) => {
     });
   }
 });
+
+// Démarrer le service de planification
+const SchedulerService = require('./services/scheduler');
+const scheduler = new SchedulerService();
+scheduler.scheduleOpendataDownload();
+scheduler.scheduleDailyYesterdayDownloadAndWhois();
+scheduler.scheduleDataCleanup();
 
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '../frontend/dist');
