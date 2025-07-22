@@ -548,22 +548,27 @@ app.get('/api/files/preview/:filename', requireAuth, async (req, res) => {
   try {
     const { filename } = req.params;
     const { lines = 10 } = req.query;
-    
-    const filePath = path.join(fileService.dataDir, filename);
-    const preview = await fileService.getCSVPreview(filePath, parseInt(lines));
-    
-    if (!preview) {
-      return res.status(404).json({ error: 'Fichier non trouvé' });
+    const possibleDirs = [fileService.dataDir, fileService.outputDir, fileService.inputDir];
+    let filePath = null;
+    for (const dir of possibleDirs) {
+      const testPath = path.join(dir, filename);
+      if (fs.existsSync(testPath)) {
+        filePath = testPath;
+        break;
+      }
     }
-    
-    res.json(preview);
-    
+    if (!filePath) {
+      console.log('Fichier non trouvé dans aucun dossier:', filename);
+      return res.status(404).json({ success: false, error: 'Fichier non trouvé' });
+    }
+    const preview = await fileService.getCSVPreview(filePath, parseInt(lines));
+    if (!preview) {
+      return res.status(500).json({ success: false, error: 'Impossible de lire le fichier' });
+    }
+    res.json({ success: true, preview });
   } catch (error) {
     console.error('❌ Erreur lors de la lecture du fichier:', error.message);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -1382,6 +1387,21 @@ app.get('/api/dates/stats', (req, res) => {
       success: false, 
       error: error.message 
     });
+  }
+});
+
+// Route pour analyse WHOIS/RDAP d'un seul domaine
+app.post('/api/whois/single', requireAuth, async (req, res) => {
+  try {
+    const { domain } = req.body;
+    if (!domain) {
+      return res.status(400).json({ success: false, error: 'Domaine requis' });
+    }
+    const result = await whoisService.analyzeSingleDomain(domain);
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('❌ Erreur WHOIS single:', error.message);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

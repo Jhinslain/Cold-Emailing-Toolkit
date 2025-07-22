@@ -76,6 +76,15 @@ function App() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [elapsed, setElapsed] = useState(0);
 
+  // Ajouter l'état pour la modale d'aperçu
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewFileName, setPreviewFileName] = useState(null);
+
+  // État pour la recherche Whois/RDAP sur un domaine
+  const [whoisInput, setWhoisInput] = useState("");
+  const [whoisLoading, setWhoisLoading] = useState(false);
+  const [whoisResult, setWhoisResult] = useState(null);
+
   // Ajout de la vérification d'authentification au chargement
   useEffect(() => {
     const checkAuth = async () => {
@@ -703,13 +712,14 @@ function App() {
   const handlePreview = async (file) => {
     setCsvPreviewLoading(true);
     setSelectedAction(`preview-${file.name}`);
-    
+    setPreviewFileName(file.name);
+    setShowPreviewModal(true);
     try {
       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/preview/${encodeURIComponent(file.name)}`);
       const data = await response.json();
-      
+      console.log('Réponse API preview:', data); // AJOUTE CE LOG
       if (data.success) {
-        setCsvPreview(data.preview);
+        setCsvPreview(data.preview.preview); // <-- c'est ici qu'il faut corriger
       } else {
         setCsvPreview(null);
       }
@@ -801,9 +811,32 @@ function App() {
   };
 
   // Fonction pour télécharger un fichier
-  const handleExport = (file) => {
-    // Lien direct vers l'API de téléchargement (à adapter si besoin)
-    window.open(`${import.meta.env.VITE_API_URL}/api/files/download/${encodeURIComponent(file.name)}`, '_blank');
+  const handleExport = async (file) => {
+    const sessionId = localStorage.getItem('sessionId');
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/files/download/${encodeURIComponent(file.name)}`,
+        {
+          method: 'GET',
+          headers: { 'x-session-id': sessionId }
+        }
+      );
+      if (!response.ok) {
+        showMessage('error', "Erreur lors du téléchargement du fichier");
+        return;
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      showMessage('error', "Erreur lors du téléchargement");
+    }
   };
 
 
@@ -957,6 +990,17 @@ function App() {
         addLog('error', { message: 'Erreur de parsing des données' });
       }
       eventSource.close();
+    });
+    eventSource.addEventListener('refresh', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        addLog('refresh', data);
+        // Actualiser la liste des fichiers
+        fetchFiles();
+      } catch (error) {
+        console.error('Erreur parsing JSON refresh:', error, e.data);
+        addLog('error', { message: 'Erreur de parsing des données' });
+      }
     });
   };
 
@@ -1155,27 +1199,6 @@ function App() {
   }
   const success = processed > 0 ? ((emails / processed) * 100).toFixed(1) : 0;
 
-  const handleForceDailyAndWhois = async () => {
-    setLoading(true);
-    try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/schedule/daily-whois`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await response.json();
-      if (data.success) {
-        showMessage('success', data.message || 'Téléchargement + WHOIS lancé avec succès !');
-        fetchFiles();
-      } else {
-        showMessage('error', data.error || 'Erreur lors du lancement du job');
-      }
-    } catch (error) {
-      showMessage('error', 'Erreur de connexion au serveur');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen relative">
       {/* Header moderne avec effet de verre */}
@@ -1285,8 +1308,9 @@ function App() {
         <div className="glass-card p-8 rounded-2xl">
           <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
             <CloudArrowDownIcon className="h-6 w-6 mr-3 text-blue-300" />
-            Téléchargements
+            Outils
           </h2>
+          {/* Première ligne : boutons de téléchargement */}
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
             <div className="flex gap-4">
               {/* Bouton Opendata */}
@@ -1319,14 +1343,6 @@ function App() {
               >
                 <GlobeAltIcon className="h-6 w-6 mr-3" />
                 Télécharger Quotidien
-              </button>
-              <button
-                onClick={handleForceDailyAndWhois}
-                disabled={loading}
-                className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <InformationCircleIcon className="h-6 w-6 mr-3" />
-                {loading ? 'Traitement...' : 'Forcer Schedule'}
               </button>
             </div>
             {/* Bouton Import CSV à droite */}
@@ -1365,6 +1381,103 @@ function App() {
               </label>
             </div>
           </div>
+          {/* Deuxième ligne : bouton Whois/RDAP sur 1 domaine */}
+          <div className="flex flex-row gap-4 mt-6">
+            {selectedAction !== 'whois-rdap-single' ? (
+              <button
+                className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium"
+                onClick={() => setSelectedAction('whois-rdap-single')}
+              >
+                <MagnifyingGlassIcon className="h-6 w-6 mr-3" />
+                Recherche Whois/RDAP
+              </button>
+            ) : (
+              <form
+                className="flex items-center gap-2 w-full max-w-md"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!whoisInput.trim()) return;
+                  setWhoisLoading(true);
+                  setWhoisResult(null);
+                  try {
+                    const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/whois/single`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ domain: whoisInput.trim() })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                      setWhoisResult(data.result);
+                    } else {
+                      setWhoisResult({ domain: whoisInput, error: data.error || 'Erreur lors de la recherche' });
+                    }
+                  } catch (error) {
+                    setWhoisResult({ domain: whoisInput, error: 'Erreur de connexion au serveur' });
+                  } finally {
+                    setWhoisLoading(false);
+                  }
+                }}
+              >
+                {/* Plus de bouton 'Lancer', la loupe à gauche sert de submit */}
+                <button
+                  type="submit"
+                  className="inline-flex items-center px-4 py-3 bg-glass-200 rounded-l-lg h-12 hover:bg-blue-100 focus:bg-blue-200 disabled:opacity-50"
+                  disabled={whoisLoading || !whoisInput.trim()}
+                  style={{ border: 0 }}
+                  tabIndex={0}
+                  title="Lancer la recherche"
+                >
+                  <MagnifyingGlassIcon className="h-6 w-6 text-blue-400" />
+                </button>
+                <input
+                  type="text"
+                  className="flex-1 px-6 py-3 h-12 rounded-r-lg bg-neutral-700 text-white border-t border-b border-r border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+                  placeholder="Entrer un domaine .fr"
+                  value={whoisInput}
+                  onChange={e => setWhoisInput(e.target.value)}
+                  autoFocus
+                  disabled={whoisLoading}
+                  style={{ minWidth: 0 }}
+                />
+                <button
+                  type="button"
+                  className="ml-2 text-neutral-400 hover:text-white"
+                  onClick={() => { setSelectedAction(null); setWhoisInput(""); setWhoisResult(null); }}
+                  title="Fermer"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </form>
+            )}
+          </div>
+          {/* Affichage du résultat fictif (à remplacer par l'appel réel) */}
+          {whoisLoading && (
+            <div className="mt-2 bg-neutral-700 border border-neutral-600 rounded-lg p-4 text-blue-300 max-w-md">
+              <span>Recherche en cours...</span>
+            </div>
+          )}
+          {whoisResult && !whoisLoading && (
+            <div className="mt-2 bg-neutral-700 border border-neutral-600 rounded-lg p-4 text-white max-w-md">
+              <div className="font-bold text-blue-300 mb-1">{whoisResult.domain}</div>
+              {whoisResult.error ? (
+                <div className="text-red-400">{whoisResult.error}</div>
+              ) : (
+                <div className="space-y-1 text-sm">
+                  <div><span className="font-semibold text-blue-200">Email :</span> {whoisResult.contacts?.best_email || <span className="text-glass-400 italic">Non trouvé</span>}</div>
+                  <div><span className="font-semibold text-blue-200">Numéro :</span> {whoisResult.contacts?.best_phone || <span className="text-glass-400 italic">Non trouvé</span>}</div>
+                  <div><span className="font-semibold text-blue-200">Organisation :</span> {whoisResult.rdap_info?.organization || whoisResult.whois_info?.registrar || <span className="text-glass-400 italic">Non trouvé</span>}</div>
+                  <div><span className="font-semibold text-blue-200">Adresse :</span> {(() => {
+                    const adr = whoisResult.rdap_info?.address;
+                    if (Array.isArray(adr)) return adr.filter(Boolean).join(', ');
+                    if (typeof adr === 'string') return adr;
+                    return <span className="text-glass-400 italic">Non trouvée</span>;
+                  })()}</div>
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Affichage du progrès d'import */}
           {importProgress && (
@@ -1474,6 +1587,16 @@ function App() {
                       className={`glass-card glass-card-hover p-6 rounded-2xl bg-gradient-to-br ${getFileTypeColor(file)} animate-fade-in relative transition-all duration-200 ${isSelected ? 'ring-2 ring-accent-400 ring-offset-2 ring-offset-dark-600' : ''}`}
                       style={{animationDelay: `${index * 0.1}s`}}
                     >
+                      {/* Affichage du statut de traitement WHOIS (ou autre) */}
+                      {file.traitement && file.traitement !== '' && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="animate-spin h-5 w-5 text-blue-200" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                          <span className="text-blue-100 font-semibold text-sm tracking-wide">Traitement : {file.traitement.toUpperCase()}</span>
+                        </div>
+                      )}
                       {!isWhoisTerminal && (
                         <>
                           {/* Indicateur de sélection - toujours visible */}
@@ -1937,6 +2060,61 @@ function App() {
                 {loading ? 'Filtrage...' : 'Lancer le filtrage'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale d'aperçu CSV */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-neutral-800 border border-neutral-600 rounded-2xl p-8 max-w-2xl w-full mx-4 animate-slide-up shadow-2xl relative">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">
+                Aperçu du fichier&nbsp;
+                <span className="text-blue-300 text-base font-mono">{previewFileName}</span>
+              </h3>
+              <button
+                onClick={() => { setShowPreviewModal(false); setCsvPreview(null); setPreviewFileName(null); setSelectedAction(null); }}
+                className="text-neutral-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {csvPreviewLoading ? (
+              <div className="flex items-center justify-center h-32 text-blue-300">
+                <svg className="animate-spin h-6 w-6 mr-2" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                Chargement de l'aperçu...
+              </div>
+            ) : Array.isArray(csvPreview) && csvPreview.length > 0 ? (
+              <div className="overflow-x-auto max-h-[60vh]">
+                <table className="min-w-full text-sm text-left text-white border border-neutral-700 rounded-lg overflow-hidden">
+                  <thead className="bg-neutral-700">
+                    <tr>
+                      {Object.keys(csvPreview[0]).map((col, idx) => (
+                        <th key={idx} className="px-3 py-2 font-semibold border-b border-neutral-600">{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {csvPreview.map((row, i) => (
+                      <tr key={i} className="border-b border-neutral-700 hover:bg-neutral-700/40">
+                        {Object.keys(csvPreview[0]).map((col, j) => (
+                          <td key={j} className="px-3 py-1 whitespace-nowrap">{row[col]}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="text-xs text-neutral-400 mt-2">(Aperçu des 10 premières lignes)</div>
+              </div>
+            ) : (
+              <div className="text-red-400">Impossible de charger l'aperçu du fichier.</div>
+            )}
           </div>
         </div>
       )}

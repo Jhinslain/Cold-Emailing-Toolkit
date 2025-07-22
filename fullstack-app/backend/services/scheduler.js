@@ -34,7 +34,7 @@ class SchedulerService {
 
     // Téléchargement automatique du fichier de la veille + WHOIS (tous les jours à 7h)
     scheduleDailyYesterdayDownloadAndWhois() {
-        cron.schedule('0 12 * * *', async () => {
+        cron.schedule('0 6 * * *', async () => {
             console.log('🔄 Téléchargement automatique du fichier de la veille (J-1)...');
             try {
                 await this.dailyService.downloadDailyFiles('yesterday');
@@ -60,7 +60,7 @@ class SchedulerService {
 
     // Traitement WHOIS automatique (tous les jours à 8h du matin)
     scheduleWhoisProcessing() {
-        cron.schedule('0 13 * * *', async () => {
+        cron.schedule('0 7 * * *', async () => {
             console.log('🔄 Démarrage du traitement WHOIS automatique sur le fichier de la veille...');
             try {
                 // Trouver le fichier de la veille

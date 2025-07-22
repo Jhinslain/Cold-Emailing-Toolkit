@@ -65,7 +65,7 @@ class WhoisAnalyzer {
             // 2. Si pas de contact RDAP, essayer WHOIS
             if (!contacts.best_email && this.results.whois_info.registrar_contact) {
                 const whoisContact = this.results.whois_info.registrar_contact;
-                if (whoisContact.email && !this.isPrivacyEmail(whoisContact.email)) {
+                if (whoisContact.email && !this.isBlockedEmail(whoisContact.email)) {
                     contacts.best_email = whoisContact.email;
                     contacts.best_phone = whoisContact.phone;
                     contacts.source = 'WHOIS';
@@ -90,7 +90,10 @@ class WhoisAnalyzer {
             const parsed = this.parseWhoisData(whoisData);
             
             this.results.whois_info = parsed;
-            
+            // Ajout : stocker la date de création
+            if (parsed.creation_date) {
+                this.results.creation_date = parsed.creation_date;
+            }
         } catch (error) {
             this.results.errors.push(`Erreur WHOIS: ${error.message}`);
         }
@@ -146,7 +149,7 @@ class WhoisAnalyzer {
                                     console.log(`    📍 Adresse: ${adr || 'Non trouvé'}`);
                                     
                                     // Vérifier si l'email n'est pas un domaine de protection
-                                    if (email && !this.isPrivacyEmail(email)) {
+                                    if (email && !this.isBlockedEmail(email)) {
                                         console.log(`    ✅ Email valide (non-protégé): ${email}`);
                                         this.results.rdap_info = {
                                             role: role,
@@ -165,7 +168,7 @@ class WhoisAnalyzer {
                             }
                             
                             // Autres champs possibles
-                            if (entity.email && !this.isPrivacyEmail(entity.email)) {
+                            if (entity.email && !this.isBlockedEmail(entity.email)) {
                                 console.log(`    📧 Email direct valide: ${entity.email}`);
                                 this.results.rdap_info = {
                                     role: role,
@@ -195,50 +198,39 @@ class WhoisAnalyzer {
         }
     }
 
-    // Méthode pour détecter les emails protégés
-    isPrivacyEmail(email) {
+    // Nouvelle méthode unifiée : blocage des emails de privacy et fournisseurs
+    isBlockedEmail(email) {
         if (!email) return false;
-        const domain = email.split('@')[1]?.toLowerCase();
-        
-        // Liste des domaines de protection/privacy connus
-        const PRIVACY_DOMAINS = [
-            'hostinger.com',
-            'ovh.com',
-            'ovh.net',
-            'planethoster.info',
-            'ionos.com',
-            '1und1.de',
-            'gandi.net',
-            'o2switch.fr',
-            'spamfree.bookmyname.com',
-            'afnic.fr',
-            'nic.fr',
-            'whoisguard.com',
-            'domainsbyproxy.com',
-            'privacyprotect.org',
-            'privatewhois.com',
-            'netim.com',
-            'free.org',
-            'one.com',
-            'amen.fr',
-            'openprovider.com',
-            'tldregistrarsolutions.com',
-            'lws.fr',
-            'infomaniak.com',
-            'key-systems.net',
-            'dsi.cnrs.fr'
+        const emailLower = email.toLowerCase();
+        const [local, domain] = emailLower.split('@');
+        if (!domain) return false;
+        // Liste globale des domaines à bloquer (privacy + fournisseurs)
+        const BLOCKED_EMAIL_DOMAINS = [
+            // Privacy/proxy
+            'hostinger.com', 'ovh.com', 'ovh.net', 'planethoster.info', 'ionos.com', '1und1.de',
+            'gandi.net', 'o2switch.fr', 'spamfree.bookmyname.com', 'afnic.fr', 'nic.fr',
+            'whoisguard.com', 'domainsbyproxy.com', 'privacyprotect.org', 'privatewhois.com',
+            'netim.com', 'free.org', 'one.com', 'amen.fr', 'openprovider.com',
+            'tldregistrarsolutions.com', 'lws.fr', 'infomaniak.com', 'key-systems.net', 'dsi.cnrs.fr',
+            // Fournisseurs/registrars
+            'catched.com', 'cliken-web.com', 'bloomup.net', 'domainorder.com', 'incomm.fr',
+            'epag.de', 'nameshield.net', 'tool-domains.com', 'nomio24.com', 'info100t.fr',
+            'local.fr', 'internetx.com', 'biim-com.com', 'kifcorp.fr', 'casalonga.com',
         ];
-        
-        // Vérifier les domaines exacts
-        if (PRIVACY_DOMAINS.some(privacyDomain => 
-            domain === privacyDomain || domain.endsWith('.' + privacyDomain)
+        // Mots-clés à bloquer dans l'email (local ou domaine)
+        const BLOCKED_KEYWORDS = [
+            'ovh', 'ionos', '1und1', 'o2switch', 'histinger', 'whois', 'privacy', 'protect', 'guard', 'proxy',
+            'domain', 'dns', 'support', 'info', 'registrar'
+        ];
+        // Blocage par domaine exact ou sous-domaine
+        if (BLOCKED_EMAIL_DOMAINS.some(blockedDomain => 
+            domain === blockedDomain || domain.endsWith('.' + blockedDomain)
         )) {
             return true;
         }
-        
-        // Vérifier les mots-clés dans le domaine
-        const privacyKeywords = ['ovh', 'ionos', '1und1', 'o2switch', 'histinger', 'whois', 'privacy', 'protect', 'guard', 'proxy'];
-        return privacyKeywords.some(keyword => domain.includes(keyword));
+        // Blocage par mot-clé dans l'email (local ou domaine)
+        if (BLOCKED_KEYWORDS.some(kw => emailLower.includes(kw))) return true;
+        return false;
     }
 
     parseWhoisData(whoisData) {
@@ -253,6 +245,27 @@ class WhoisAnalyzer {
             }
         }
         
+        // Recherche de la date de création
+        let creationDate = null;
+        const creationKeys = [
+            'creation date',
+            'created',
+            'created on',
+            'domain registration date',
+            'registration date',
+            'createdate',
+            'domain create date',
+            'domain created',
+            'date de creation',
+            'date création',
+            'date de création'
+        ];
+        for (const key of creationKeys) {
+            if (parsed[key]) {
+                creationDate = parsed[key];
+                break;
+            }
+        }
         // Recherche des informations de contact du registrar
         const registrarContactPatterns = {
             email: [
@@ -346,6 +359,7 @@ class WhoisAnalyzer {
         return {
             registrar: parsed.registrar || parsed.registrar_name,
             registrar_contact: registrarContact,
+            creation_date: creationDate,
             raw_data: whoisData
         };
     }
@@ -358,18 +372,8 @@ class WhoisService {
         this.jobs = {}; // jobId -> { cancel: false }
     }
 
-    // Nouvelle méthode pour le streaming SSE
-    async analyzeCsvFileStream(jobId, inputCsvName, sendLog) {
-        console.log('--- APPEL analyzeCsvFileStream ---', jobId, inputCsvName);
-        console.log(`[WHOIS] Démarrage analyseCsvFileStream jobId=${jobId} fichier=${inputCsvName}`);
-        const inputCsvPath = path.join(this.dataDir, inputCsvName);
-        if (!fs.existsSync(inputCsvPath)) {
-            console.log(`[WHOIS] Fichier introuvable: ${inputCsvName}`);
-            sendLog('error', `Fichier introuvable: ${inputCsvName}`);
-            return;
-        }
-        
-        // Lire les domaines depuis le CSV (en ignorant l'en-tête)
+    // --- Méthodes utilitaires factorisées ---
+    async _extractDomainsFromCsv(inputCsvPath) {
         const domains = [];
         const rl = readline.createInterface({
             input: fs.createReadStream(inputCsvPath),
@@ -382,19 +386,109 @@ class WhoisService {
             if (domain) domains.push(domain);
         }
         rl.close();
-        
+        return domains;
+    }
+
+    _filterValidResults(results) {
+        return results.filter(row => {
+            const analyzer = row.analyzer;
+            const email = row.email;
+            if (!email) return false;
+            if (analyzer && analyzer.isBlockedEmail(email)) return false;
+            return true;
+        });
+    }
+
+    _formatDate(dateString) {
+        if (!dateString) return '';
+        let d = new Date(dateString);
+        if (!isNaN(d)) {
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}-${month}-${year}`;
+        }
+        return dateString;
+    }
+
+    _extractAddress(rdap, whois) {
+        let street1 = '', locality = '', region = '', postal = '', country = '';
+        if (rdap && rdap.address) {
+            if (Array.isArray(rdap.address)) {
+                street1 = rdap.address[2] || '';
+                locality = rdap.address[3] || '';
+                region = rdap.address[4] || '';
+                postal = rdap.address[5] || '';
+                country = rdap.address[6] || '';
+            } else if (typeof rdap.address === 'string') {
+                street1 = rdap.address;
+            }
+        } else if (whois && whois.address) {
+            street1 = whois.address;
+        }
+        return { street1, locality, region, postal, country };
+    }
+
+    _generateWhoisCsv(outputCsvPath, results) {
+        const csvHeaders = [
+            'Nom de domaine',
+            'Date de création',
+            'email',
+            'numero',
+            'whois_organization',
+            'whois_street1',
+            'whois_locality',
+            'whois_region',
+            'whois_postal_code',
+            'whois_country'
+        ];
+        const csvLines = [csvHeaders.join(',')];
+        for (let i = 0; i < results.length; i++) {
+            const row = results[i];
+            const analyzer = row.analyzer;
+            const whois = analyzer?.results.whois_info || {};
+            const rdap = analyzer?.results.rdap_info || {};
+            let creationDate = this._formatDate(analyzer?.results.creation_date || '');
+            const org = rdap.organization || whois.registrar || '';
+            const { street1, locality, region, postal, country } = this._extractAddress(rdap, whois);
+            csvLines.push([
+                row.domain,
+                creationDate,
+                row.email,
+                row.phone,
+                org,
+                street1,
+                locality,
+                region,
+                postal,
+                country
+            ].map(v => v ? String(v).replace(/,/g, ' ') : '').join(','));
+        }
+        fs.writeFileSync(outputCsvPath, csvLines.join('\n'), 'utf8');
+    }
+
+    // --- Fin méthodes utilitaires ---
+
+    // Nouvelle méthode pour le streaming SSE
+    async analyzeCsvFileStream(jobId, inputCsvName, sendLog) {
+        console.log('--- APPEL analyzeCsvFileStream ---', jobId, inputCsvName);
+        console.log(`[WHOIS] Démarrage analyseCsvFileStream jobId=${jobId} fichier=${inputCsvName}`);
+        const inputCsvPath = path.join(this.dataDir, inputCsvName);
+        if (!fs.existsSync(inputCsvPath)) {
+            console.log(`[WHOIS] Fichier introuvable: ${inputCsvName}`);
+            sendLog('error', `Fichier introuvable: ${inputCsvName}`);
+            return;
+        }
+        await this.fileService.updateFileInfo(inputCsvName, { traitement: 'whois' });
+        const domains = await this._extractDomainsFromCsv(inputCsvPath);
         if (domains.length === 0) {
             console.log(`[WHOIS] Aucun domaine trouvé dans le fichier CSV.`);
             sendLog('error', 'Aucun domaine trouvé dans le fichier CSV.');
             return;
         }
-        
-        // Préparer le nom du fichier de sortie
         const baseName = inputCsvName.replace(/\.csv$/i, '');
         const outputCsvName = baseName + '_whois.csv';
         const outputCsvPath = path.join(this.dataDir, outputCsvName);
-        
-        // Initialiser les statistiques
         const stats = {
             total: domains.length,
             processed: 0,
@@ -404,13 +498,10 @@ class WhoisService {
             errors: 0,
             startTime: Date.now()
         };
-        
-        // Fonction pour afficher les statistiques
         const displayStats = () => {
             const elapsed = Math.floor((Date.now() - stats.startTime) / 1000);
             const progress = ((stats.processed / stats.total) * 100).toFixed(1);
-            const rate = stats.processed > 0 ? Math.floor(stats.processed / (elapsed / 60)) : 0; // domaines/minute
-            
+            const rate = stats.processed > 0 ? Math.floor(stats.processed / (elapsed / 60)) : 0;
             const statsText = [
                 '\n' + '='.repeat(60),
                 `📊 STATISTIQUES WHOIS - ${new Date().toLocaleString()}`,
@@ -424,39 +515,25 @@ class WhoisService {
                 `📊 Taux de succès: ${stats.processed > 0 ? ((stats.contactsFound / stats.processed) * 100).toFixed(1) : 0}%`,
                 '='.repeat(60) + '\n'
             ].join('\n');
-            
             console.log(statsText);
             sendLog('stats', statsText);
         };
-        
-        // Analyser chaque domaine et collecter les résultats
         const results = [];
         this.jobs[jobId] = { cancel: false };
-        
         console.log(`🚀 Démarrage de l'analyse WHOIS sur ${domains.length} domaines...`);
         displayStats();
-        
         for (const domain of domains) {
             if (this.jobs[jobId]?.cancel) {
                 console.log(`[WHOIS] Annulation demandée pour jobId=${jobId}`);
                 sendLog('cancel', "Traitement annulé par l'utilisateur.");
                 break;
             }
-            
             stats.processed++;
-            
             try {
-                console.log(`[WHOIS] Analyse domaine [${stats.processed}/${stats.total}]: ${domain}`);
-                sendLog('info', `🔍 [${stats.processed}/${stats.total}] ${domain}`);
-                
                 const analyzer = new WhoisAnalyzer(domain);
                 await analyzer.analyze();
-                
                 const email = analyzer.results.contacts?.best_email || '';
                 const phone = analyzer.results.contacts?.best_phone || '';
-                
-                if (email) stats.emailsFound++;
-                if (phone) stats.phonesFound++;
                 if (email || phone) {
                     stats.contactsFound++;
                     sendLog('success', `✅ [${stats.processed}/${stats.total}] ${domain} - 📧 ${email} | 📞 ${phone}`);
@@ -465,85 +542,28 @@ class WhoisService {
                     sendLog('warn', `❌ [${stats.processed}/${stats.total}] ${domain} - Aucun contact trouvé`);
                     console.log(`[WHOIS] Aucun contact trouvé pour: ${domain}`);
                 }
-                
                 results.push({ 
                     domain, 
                     email, 
                     phone,
-                    analyzer: analyzer // Stocker l'analyseur complet avec tous les résultats
+                    analyzer: analyzer
                 });
-                
             } catch (error) {
                 stats.errors++;
                 console.log(`[WHOIS] Erreur pour ${domain}: ${error.message}`);
                 results.push({ domain, email: '', phone: '', analyzer: null });
             }
-            
-            // Afficher les statistiques tous les 100 domaines ou à la fin
             if (stats.processed % 100 === 0 || stats.processed === stats.total) {
                 displayStats();
             }
         }
-        
-        // Générer le CSV de sortie si pas annulé
         if (!this.jobs[jobId]?.cancel) {
-            // Définir les colonnes à extraire
-            const csvHeaders = [
-                'Nom de domaine',
-                'Email',
-                'Téléphone',
-                'whois_street',
-                'whois_city',
-                'whois_postal_code',
-                'whois_region',
-                'whois_country',
-                'whois_organisation'
-            ];
-            const csvLines = [csvHeaders.join(',')];
-            for (let i = 0; i < results.length; i++) {
-                const row = results[i];
-                // Utiliser les résultats déjà calculés (plus besoin de relancer l'analyse)
-                const rdap = row.analyzer?.results.rdap_info || {};
-                const whois = row.analyzer?.results.whois_info || {};
-                // Champs enrichis (priorité RDAP, fallback WHOIS)
-                let street = '', city = '', postal = '', region = '', country = '', org = '';
-                // RDAP (vCard)
-                if (rdap.address) {
-                    if (Array.isArray(rdap.address)) {
-                        // vCard adr: ['', '', '57 rue du general de gaulle', 'enghien les bains', '', '95880', 'FR']
-                        street = rdap.address[2] || '';
-                        city = rdap.address[3] || '';
-                        region = rdap.address[4] || '';
-                        postal = rdap.address[5] || '';
-                        country = rdap.address[6] || '';
-                    } else if (typeof rdap.address === 'string') {
-                        // fallback: tout dans street
-                        street = rdap.address;
-                    }
-                } else if (whois.address) {
-                    // WHOIS: généralement une chaîne
-                    street = whois.address;
-                }
-                org = rdap.organization || whois.registrar || '';
-                csvLines.push([
-                    row.domain,
-                    row.email,
-                    row.phone,
-                    street,
-                    city,
-                    postal,
-                    region,
-                    country,
-                    org
-                ].map(v => v ? String(v).replace(/,/g, ' ') : '').join(','));
-            }
-            fs.writeFileSync(outputCsvPath, csvLines.join('\n'), 'utf8');
-            // Supprimer l'ancien fichier
+            const filteredResults = this._filterValidResults(results);
+            this._generateWhoisCsv(outputCsvPath, filteredResults);
             fs.unlinkSync(inputCsvPath);
-            // Mettre à jour le registre
             await this.fileService.updateFileLineCount(outputCsvName);
             await this.fileService.removeFileFromRegistry(inputCsvName);
-            // Statistiques finales
+            sendLog('refresh', 'Actualisation de la liste des fichiers...');
             console.log('\n' + '🎉 TRAITEMENT TERMINÉ ' + '🎉'.repeat(10));
             displayStats();
             console.log(`📁 Fichier généré: ${outputCsvName}`);
@@ -551,8 +571,8 @@ class WhoisService {
             console.log(`[WHOIS] Fichier Whois généré : ${outputCsvName}`);
         } else {
             console.log(`[WHOIS] Traitement annulé pour jobId=${jobId}`);
+            await this.fileService.updateFileInfo(inputCsvName, { traitement: '' });
         }
-        
         delete this.jobs[jobId];
         console.log(`[WHOIS] Fin du jobId=${jobId}`);
     }
@@ -566,51 +586,45 @@ class WhoisService {
 
     // (ancienne méthode inchangée)
     async analyzeCsvFile(inputCsvName) {
-        const inputCsvPath = path.join(this.dataDir, inputCsvName);
-        if (!fs.existsSync(inputCsvPath)) {
-            throw new Error(`Fichier introuvable: ${inputCsvName}`);
+        await this.fileService.updateFileInfo(inputCsvName, { traitement: 'whois' });
+        try {
+            const inputCsvPath = path.join(this.dataDir, inputCsvName);
+            if (!fs.existsSync(inputCsvPath)) {
+                throw new Error(`Fichier introuvable: ${inputCsvName}`);
+            }
+            const domains = await this._extractDomainsFromCsv(inputCsvPath);
+            if (domains.length === 0) {
+                throw new Error('Aucun domaine trouvé dans le fichier CSV.');
+            }
+            const baseName = inputCsvName.replace(/\.csv$/i, '');
+            const outputCsvName = baseName + '_whois.csv';
+            const outputCsvPath = path.join(this.dataDir, outputCsvName);
+            const results = [];
+            for (const domain of domains) {
+                const analyzer = new WhoisAnalyzer(domain);
+                await analyzer.analyze();
+                const email = analyzer.results.contacts?.best_email || '';
+                const phone = analyzer.results.contacts?.best_phone || '';
+                results.push({ domain, email, phone, analyzer });
+            }
+            const filteredResults = this._filterValidResults(results);
+            this._generateWhoisCsv(outputCsvPath, filteredResults);
+            fs.unlinkSync(inputCsvPath);
+            await this.fileService.updateFileLineCount(outputCsvName);
+            await this.fileService.removeFileFromRegistry(inputCsvName);
+            await this.fileService.updateFileInfo(inputCsvName, { traitement: '' });
+            return outputCsvName;
+        } catch (error) {
+            await this.fileService.updateFileInfo(inputCsvName, { traitement: '' });
+            throw error;
         }
-        // Lire les domaines depuis le CSV (en ignorant l'en-tête)
-        const domains = [];
-        const rl = readline.createInterface({
-            input: fs.createReadStream(inputCsvPath),
-            crlfDelay: Infinity
-        });
-        let isFirst = true;
-        for await (const line of rl) {
-            if (isFirst) { isFirst = false; continue; }
-            const domain = line.trim();
-            if (domain) domains.push(domain);
-        }
-        rl.close();
-        if (domains.length === 0) {
-            throw new Error('Aucun domaine trouvé dans le fichier CSV.');
-        }
-        // Préparer le nom du fichier de sortie
-        const baseName = inputCsvName.replace(/\.csv$/i, '');
-        const outputCsvName = baseName + '_whois.csv';
-        const outputCsvPath = path.join(this.dataDir, outputCsvName);
-        // Analyser chaque domaine et collecter les résultats
-        const results = [];
-        for (const domain of domains) {
-            const analyzer = new WhoisAnalyzer(domain);
-            await analyzer.analyze();
-            const email = analyzer.results.contacts?.best_email || '';
-            const phone = analyzer.results.contacts?.best_phone || '';
-            results.push({ domain, email, phone });
-        }
-        // Générer le CSV de sortie
-        const csvLines = ['Nom de domaine,Email,Téléphone'];
-        for (const row of results) {
-            csvLines.push(`${row.domain},${row.email},${row.phone}`);
-        }
-        fs.writeFileSync(outputCsvPath, csvLines.join('\n'), 'utf8');
-        // Supprimer l'ancien fichier
-        fs.unlinkSync(inputCsvPath);
-        // Mettre à jour le registre
-        await this.fileService.updateFileLineCount(outputCsvName);
-        await this.fileService.removeFileFromRegistry(inputCsvName);
-        return outputCsvName;
+    }
+
+    // Nouvelle méthode : analyse d'un seul domaine (retourne le résultat structuré)
+    async analyzeSingleDomain(domain) {
+        const analyzer = new WhoisAnalyzer(domain);
+        await analyzer.analyze();
+        return analyzer.results;
     }
 }
 

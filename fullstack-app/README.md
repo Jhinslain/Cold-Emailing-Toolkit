@@ -59,6 +59,10 @@ cd ~/fullstack-app/backend && npm install
 cd ~/fullstack-app/frontend && npm install
 ```
 
+```bash
+sudo docker-compose logs -f
+```
+
 ### Docker Compose (build & lancement)
 ```bash
 cd ~/fullstack-app
