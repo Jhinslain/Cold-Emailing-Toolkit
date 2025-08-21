@@ -138,7 +138,6 @@ fullstack-app/
 │   └── package.json       # Dépendances frontend
 └── package.json           # Scripts globaux
 ```
-
 ## 🔧 Scripts disponibles
 - `npm run dev` : Lance backend + frontend en développement
 - `npm run build` : Build le frontend
