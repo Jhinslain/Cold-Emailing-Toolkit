@@ -8,6 +8,9 @@ const multer = require('multer');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
 
+// Import des routes des campagnes
+const campaignRoutes = require('./routes/campaigns');
+
 // --- CONFIGURATION CORS ---
 const app = express();
 const allowedOrigins = [
@@ -26,7 +29,7 @@ app.use(cors({
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'x-session-id']
 }));
 app.use(express.json());
@@ -1610,6 +1613,9 @@ app.post('/api/millionverifier/process-file', requireAuth, async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// Routes des campagnes
+app.use('/api/campaigns', campaignRoutes);
 
 // Démarrer le service de planification
 const SchedulerService = require('./services/scheduler');

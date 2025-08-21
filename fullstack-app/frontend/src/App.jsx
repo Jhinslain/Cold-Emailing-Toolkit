@@ -20,7 +20,12 @@ import {
   CheckIcon,
   ArrowPathRoundedSquareIcon,
   ArrowUpTrayIcon,
-  ChatBubbleLeftRightIcon
+  ChatBubbleLeftRightIcon,
+  UserGroupIcon,
+  PlayIcon,
+  PauseIcon,
+  StopIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 import { v4 as uuidv4 } from 'uuid';
 import Login from './Login.jsx';
@@ -57,7 +62,8 @@ function App() {
   // Ajout d'un état pour la suppression (nom du fichier à supprimer)
   const [fileToDelete, setFileToDelete] = useState(null);
   
-
+  // État pour la confirmation d'arrêt de campagne
+  const [campaignToStop, setCampaignToStop] = useState(null);
 
   // État pour les jobs Whois (par fichier)
   const [whoisJobs, setWhoisJobs] = useState({});
@@ -93,6 +99,17 @@ function App() {
   // États pour afficher plus de fichiers
   const [filesToShow, setFilesToShow] = useState(9);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // Nouvel état pour les onglets
+  const [activeTab, setActiveTab] = useState('domains');
+
+  // États pour les campagnes SmartLeads
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignStats, setCampaignStats] = useState(null);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
+  const [showCreateCampaignModal, setShowCreateCampaignModal] = useState(false);
+  const [campaignToDelete, setCampaignToDelete] = useState(null);
+  const [campaignActionLoading, setCampaignActionLoading] = useState({});
 
   // Ajout de la vérification d'authentification au chargement
   useEffect(() => {
@@ -145,6 +162,7 @@ function App() {
       fetchStats();
       fetchFiles();
       fetchDatesStats();
+      fetchCampaigns();
     }
   }, [authenticated]);
 
@@ -256,6 +274,172 @@ function App() {
       
     } catch (error) {
       console.error('Erreur lors du chargement des fichiers:', error);
+    }
+  };
+
+  // Fonctions pour les campagnes SmartLeads
+  const fetchCampaigns = async () => {
+    try {
+      setCampaignsLoading(true);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns`);
+      const data = await response.json();
+      
+      // L'API retourne directement un tableau de campagnes
+      if (Array.isArray(data)) {
+        setCampaigns(data);
+        // Calculer les stats à partir des campagnes
+        const stats = {
+          totalCampaigns: data.length,
+          draftedCampaigns: data.filter(c => c.status === 'DRAFTED').length,
+          activeCampaigns: data.filter(c => c.status === 'ACTIVE').length,
+          pausedCampaigns: data.filter(c => c.status === 'PAUSED').length,
+          stoppedCampaigns: data.filter(c => c.status === 'STOPPED').length,
+          completedCampaigns: data.filter(c => c.status === 'COMPLETED').length,
+        };
+        setCampaignStats(stats);
+      } else {
+        console.error('Format de données inattendu:', data);
+        setCampaigns([]);
+        setCampaignStats(null);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des campagnes:', error);
+      setCampaigns([]);
+      setCampaignStats(null);
+    } finally {
+      setCampaignsLoading(false);
+    }
+  };
+
+  const createCampaign = async (campaignData) => {
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(campaignData)
+      });
+      
+      if (response.ok) {
+        const newCampaign = await response.json();
+        setCampaigns(prev => [...prev, newCampaign]);
+        setShowCreateCampaignModal(false);
+        setMessage({ type: 'success', text: 'Campagne créée avec succès' });
+        fetchCampaigns(); // Recharger pour avoir les stats à jour
+      } else {
+        const error = await response.json();
+        setMessage({ type: 'error', text: error.error || 'Erreur lors de la création' });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la création de la campagne:', error);
+      setMessage({ type: 'error', text: 'Erreur de connexion' });
+    }
+  };
+
+  const updateCampaignStatus = async (campaignId, newStatus) => {
+    try {
+      setCampaignActionLoading(prev => ({ ...prev, [campaignId]: true }));
+      
+      // Utiliser les nouvelles routes spécifiques selon le statut
+      let endpoint = '';
+      let method = 'POST';
+      
+      switch (newStatus) {
+        case 'paused':
+          endpoint = `${import.meta.env.VITE_API_URL}/api/campaigns/${campaignId}/pause`;
+          break;
+        case 'active':
+        case 'start':
+          endpoint = `${import.meta.env.VITE_API_URL}/api/campaigns/${campaignId}/start`;
+          break;
+        case 'stopped':
+          endpoint = `${import.meta.env.VITE_API_URL}/api/campaigns/${campaignId}/stop`;
+          break;
+        default:
+          // Pour les autres statuts, utiliser la route générique
+          endpoint = `${import.meta.env.VITE_API_URL}/api/campaigns/${campaignId}/status`;
+          method = 'POST';
+          break;
+      }
+      
+      const response = await authFetch(endpoint, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: method === 'POST' ? JSON.stringify({ status: newStatus }) : undefined
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (result.success) {
+          // Mettre à jour la campagne dans l'état local immédiatement
+          setCampaigns(prev => prev.map(c => 
+            c.id === campaignId 
+              ? { ...c, status: newStatus }
+              : c
+          ));
+          
+          setMessage({ type: 'success', text: result.message || `Statut de la campagne mis à jour: ${newStatus}` });
+          
+          // Attendre un peu avant de recharger pour laisser l'API se synchroniser
+          setTimeout(() => {
+            fetchCampaigns(); // Recharger pour avoir les stats à jour
+          }, 1000);
+        } else {
+          setMessage({ type: 'error', text: result.error || 'Erreur lors de la mise à jour' });
+        }
+      } else {
+        const error = await response.json();
+        setMessage({ type: 'error', text: error.error || 'Erreur lors de la mise à jour' });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du statut:', error);
+      setMessage({ type: 'error', text: 'Erreur de connexion' });
+    } finally {
+      setCampaignActionLoading(prev => ({ ...prev, [campaignId]: false }));
+    }
+  };
+
+  const deleteCampaign = async (campaignId) => {
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/${campaignId}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        setCampaigns(prev => prev.filter(c => c.id !== campaignId));
+        setCampaignToDelete(null);
+        setMessage({ type: 'success', text: 'Campagne supprimée avec succès' });
+        fetchCampaigns(); // Recharger pour avoir les stats à jour
+      } else {
+        const error = await response.json();
+        setMessage({ type: 'error', text: error.error || 'Erreur lors de la suppression' });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la suppression de la campagne:', error);
+      setMessage({ type: 'error', text: 'Erreur de connexion' });
+    }
+  };
+
+  const duplicateCampaign = async (campaignId, newData = {}) => {
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/${campaignId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newData)
+      });
+      
+      if (response.ok) {
+        const duplicatedCampaign = await response.json();
+        setCampaigns(prev => [...prev, duplicatedCampaign]);
+        setMessage({ type: 'success', text: 'Campagne dupliquée avec succès' });
+        fetchCampaigns(); // Recharger pour avoir les stats à jour
+      } else {
+        const error = await response.json();
+        setMessage({ type: 'error', text: error.error || 'Erreur lors de la duplication' });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la duplication de la campagne:', error);
+      setMessage({ type: 'error', text: 'Erreur de connexion' });
     }
   };
 
@@ -1309,68 +1493,114 @@ function App() {
         </div>
       )}
 
-      {/* Stats Cards avec effet de verre */}
+      {/* Stats modernes sans box */}
       {stats && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="glass-card glass-card-hover p-6 rounded-2xl animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="group relative p-6 rounded-2xl bg-gradient-to-br from-purple-500/20 to-violet-600/20 backdrop-blur-sm border border-purple-400/30 hover:border-purple-400/50 transition-all duration-300 hover:scale-105 animate-fade-in">
               <div className="flex items-center">
-                <div className="p-3 bg-blue-500 rounded-xl">
-                  <FolderIcon className="h-8 w-8 text-blue-300" />
+                <div className="p-3 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg">
+                  <FolderIcon className="h-8 w-8 text-white" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-glass-300">Fichiers de données</p>
-                  <p className="text-2xl font-bold text-white">{stats.dataFiles}</p>
+                  <p className="text-sm font-medium text-purple-200">Fichiers de données</p>
+                  <p className="text-3xl font-bold text-white">{stats.dataFiles}</p>
                 </div>
               </div>
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-violet-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </div>
             
-            <div className="glass-card glass-card-hover p-6 rounded-2xl animate-fade-in" style={{animationDelay: '0.1s'}}>
+            <div className="group relative p-6 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-amber-600/20 backdrop-blur-sm border border-yellow-400/30 hover:border-yellow-400/50 transition-all duration-300 hover:scale-105 animate-fade-in" style={{animationDelay: '0.1s'}}>
               <div className="flex items-center">
-                <div className="p-3 bg-emerald-500 rounded-xl">
-                  <ChartBarIcon className="h-8 w-8 text-emerald-300" />
+                <div className="p-3 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-xl shadow-lg">
+                  <ChartBarIcon className="h-8 w-8 text-white" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-glass-300">Fichiers traités</p>
-                  <p className="text-2xl font-bold text-white">{stats.outputFiles}</p>
+                  <p className="text-sm font-medium text-yellow-200">Fichiers traités</p>
+                  <p className="text-3xl font-bold text-white">{stats.outputFiles}</p>
                 </div>
               </div>
+              <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-amber-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </div>
             
-            <div className="glass-card glass-card-hover p-6 rounded-2xl animate-fade-in" style={{animationDelay: '0.2s'}}>
+            <div className="group relative p-6 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-600/20 backdrop-blur-sm border border-green-400/30 hover:border-green-400/50 transition-all duration-300 hover:scale-105 animate-fade-in" style={{animationDelay: '0.2s'}}>
               <div className="flex items-center">
-                <div className="p-3 bg-purple-500 rounded-xl">
-                  <CloudArrowDownIcon className="h-8 w-8 text-purple-300" />
+                <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg">
+                  <CloudArrowDownIcon className="h-8 w-8 text-white" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-glass-300">Taille données</p>
-                  <p className="text-2xl font-bold text-white">{formatFileSize(stats.totalDataSize)}</p>
+                  <p className="text-sm font-medium text-green-200">Taille des données</p>
+                  <p className="text-3xl font-bold text-white">{formatFileSize(stats.totalDataSize)}</p>
                 </div>
               </div>
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </div>
             
-            <div className="glass-card glass-card-hover p-6 rounded-2xl animate-fade-in" style={{animationDelay: '0.3s'}}>
+            <div className="group relative p-6 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-600/20 backdrop-blur-sm border border-blue-400/30 hover:border-blue-400/50 transition-all duration-300 hover:scale-105 animate-fade-in" style={{animationDelay: '0.3s'}}>
               <div className="flex items-center">
-                <div className="p-3 bg-orange-500 rounded-xl">
-                  <ServerIcon className="h-8 w-8 text-orange-300" />
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl shadow-lg">
+                  <UserGroupIcon className="h-8 w-8 text-white" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-glass-300">Taille traités</p>
-                  <p className="text-2xl font-bold text-white">{formatFileSize(stats.totalOutputSize)}</p>
+                  <p className="text-sm font-medium text-blue-200">Campagnes lancées</p>
+                  <p className="text-3xl font-bold text-white">{campaigns.length}</p>
                 </div>
               </div>
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Actions de téléchargement avec design moderne */}
+      {/* Barre d'onglets moderne */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-        <div className="glass-card p-8 rounded-2xl">
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
-            <CloudArrowDownIcon className="h-6 w-6 mr-3 text-blue-300" />
-            Outils
-          </h2>
+        <div className="flex justify-center space-x-6">
+          <button
+            onClick={() => setActiveTab('domains')}
+            className={`group relative px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 ${
+              activeTab === 'domains'
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-2xl shadow-blue-500/25'
+                : 'bg-glass-200 text-glass-300 hover:bg-glass-300 hover:text-white backdrop-blur-sm'
+            }`}
+          >
+            <div className="flex items-center space-x-3">
+              <GlobeAltIcon className="h-6 w-6" />
+              <span>Domaines AFNIC</span>
+            </div>
+            {activeTab === 'domains' && (
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-white rounded-full"></div>
+            )}
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('campaigns')}
+            className={`group relative px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 ${
+              activeTab === 'campaigns'
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-2xl shadow-blue-500/25'
+                : 'bg-glass-200 text-glass-300 hover:bg-glass-300 hover:text-white backdrop-blur-sm'
+            }`}
+          >
+            <div className="flex items-center space-x-3">
+              <UserGroupIcon className="h-6 w-6" />
+              <span>Campagnes SmartLeads</span>
+            </div>
+            {activeTab === 'campaigns' && (
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-white rounded-full"></div>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Contenu de l'onglet Domaines AFNIC */}
+      {activeTab === 'domains' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+          <div className="glass-card p-8 rounded-2xl">
+            {/* Section Outils */}
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <CloudArrowDownIcon className="h-6 w-6 mr-3 text-blue-300" />
+                Outils
+              </h2>
           {/* Première ligne : boutons de téléchargement */}
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
             <div className="flex gap-4">
@@ -1552,11 +1782,10 @@ function App() {
               </div>
             </div>
           )}
-        </div>
-      </div>
+            </div>
 
-      {/* Files Cards Section avec design moderne */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 mb-12">
+            {/* Section Fichiers */}
+            <div className="mt-8 pt-8 border-t border-glass-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-2">
           <h2 className="text-2xl font-bold text-white flex items-center">
             <DocumentTextIcon className="h-6 w-6 mr-3 text-blue-300" />
@@ -1965,9 +2194,183 @@ function App() {
             );
           })()
         )}
-      </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Onglet Campagnes SmartLeads */}
+      {activeTab === 'campaigns' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 mb-12">
+          <div className="glass-card p-8 rounded-2xl">
+            {/* Section Outils */}
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <UserGroupIcon className="h-6 w-6 mr-3 text-blue-300" />
+                Outils
+              </h2>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowCreateCampaignModal(true)}
+                  className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium"
+                >
+                  <SparklesIcon className="h-6 w-6 mr-3" />
+                  Lancer une campagne
+                </button>
+              </div>
+            </div>
 
 
+
+            {/* Liste des campagnes */}
+            <div>
+              <h3 className="text-xl font-semibold text-white mb-4">Campagnes</h3>
+              {campaignsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-300 mx-auto"></div>
+                  <p className="text-glass-300 mt-4">Chargement des campagnes...</p>
+                </div>
+              ) : campaigns.length === 0 ? (
+                <div className="text-center py-16">
+                  <UserGroupIcon className="h-16 w-16 text-glass-300 mx-auto mb-4" />
+                  <p className="text-glass-300 text-lg mb-2">Aucune campagne</p>
+                  <p className="text-glass-400">Créez votre première campagne pour commencer</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {campaigns
+                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Trier par date de création (plus récentes en premier)
+                    .slice(0, 4) // Prendre seulement les 4 dernières
+                    .map((campaign) => (
+                    <div key={campaign.id} className="glass-card p-6 rounded-xl">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <h4 className="text-lg font-semibold text-white">{campaign.name}</h4>
+                            <span className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+                              campaign.status === 'DRAFTED' ? 'bg-gray-500/20 text-gray-300 border-gray-400/30' :
+                              campaign.status === 'ACTIVE' ? 'bg-green-500/20 text-green-300 border-green-400/30' :
+                              campaign.status === 'START' ? 'bg-blue-500/20 text-blue-300 border-blue-400/30' :
+                              campaign.status === 'PAUSED' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30' :
+                              campaign.status === 'STOPPED' ? 'bg-red-500/20 text-red-300 border-red-400/30' :
+                              campaign.status === 'COMPLETED' ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' :
+                              'bg-gray-500/20 text-gray-300 border-gray-400/30'
+                            }`}>
+                              {campaign.status === 'DRAFTED' ? 'Brouillon' :
+                               campaign.status === 'ACTIVE' ? 'Active' :
+                               campaign.status === 'START' ? 'Démarrée' :
+                               campaign.status === 'PAUSED' ? 'En pause' :
+                               campaign.status === 'STOPPED' ? 'Arrêtée' :
+                               campaign.status === 'COMPLETED' ? 'Terminée' : 'Inconnu'}
+                            </span>
+                          </div>
+                          
+                          {campaign.smartLeadsId && (
+                            <p className="text-xs text-blue-300 font-mono mb-3">ID: {campaign.smartLeadsId}</p>
+                          )}
+                          
+                          {campaign.description && (
+                            <p className="text-glass-300 text-sm mb-4">{campaign.description}</p>
+                          )}
+                          
+                          {/* Boutons d'action avec le style des domaines */}
+                          <div className="flex gap-2 mb-4">
+                            {/* Bouton pour les campagnes en brouillon */}
+                            {campaign.status === 'DRAFTED' && (
+                              <button
+                                onClick={() => updateCampaignStatus(campaign.id, 'START')}
+                                disabled={campaignActionLoading[campaign.id]}
+                                className="glass-button-primary flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <PlayIcon className="h-3 w-3 mr-1" />
+                                {campaignActionLoading[campaign.id] ? '...' : 'Lancer'}
+                              </button>
+                            )}
+                            
+                            {/* Bouton Pause pour les campagnes actives */}
+                            {campaign.status === 'ACTIVE' && (
+                              <button
+                                onClick={() => updateCampaignStatus(campaign.id, 'PAUSED')}
+                                disabled={campaignActionLoading[campaign.id]}
+                                className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <PauseIcon className="h-3 w-3 mr-1" />
+                                {campaignActionLoading[campaign.id] ? '...' : 'Pause'}
+                              </button>
+                            )}
+                            
+                            {/* Bouton Relancer pour les campagnes en pause */}
+                            {campaign.status === 'PAUSED' && (
+                              <button
+                                onClick={() => updateCampaignStatus(campaign.id, 'START')}
+                                disabled={campaignActionLoading[campaign.id]}
+                                className="glass-button-primary flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <PlayIcon className="h-3 w-3 mr-1" />
+                                {campaignActionLoading[campaign.id] ? '...' : 'Relancer'}
+                              </button>
+                            )}
+                            
+                            {/* Bouton Stop pour les campagnes actives ou en pause */}
+                            {(campaign.status === 'ACTIVE' || campaign.status === 'PAUSED') && (
+                              <button
+                                onClick={() => setCampaignToStop(campaign)}
+                                disabled={campaignActionLoading[campaign.id]}
+                                className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <StopIcon className="h-3 w-3 mr-1" />
+                                {campaignActionLoading[campaign.id] ? '...' : 'Stop'}
+                              </button>
+                            )}
+                          </div>
+                          
+                          {/* Informations de date */}
+                          <div className="text-sm text-glass-400">
+                            <span>Créée le {new Date(campaign.createdAt).toLocaleDateString('fr-FR')}</span>
+                            {campaign.endDate && (
+                              <span className="ml-4">Fin prévue: {new Date(campaign.endDate).toLocaleDateString('fr-FR')}</span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Boutons secondaires à droite avec le style des domaines */}
+                        <div className="flex flex-col gap-2 ml-6">
+                          <button
+                            onClick={() => duplicateCampaign(campaign.id, {
+                              name: `${campaign.name} (Copie)`,
+                              description: `${campaign.description} - Copie créée le ${new Date().toLocaleDateString('fr-FR')}`
+                            })}
+                            className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                          >
+                            <DocumentDuplicateIcon className="h-3 w-3 mr-1" />
+                            Dupliquer
+                          </button>
+                          <button
+                            onClick={() => setCampaignToDelete(campaign)}
+                            className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200"
+                          >
+                            <TrashIcon className="h-3 w-3 mr-1" />
+                            Supprimer
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Indicateur s'il y a plus de campagnes */}
+                  {campaigns.length > 4 && (
+                    <div className="text-center py-4">
+                      <p className="text-glass-400 text-sm">
+                        Affichage des 4 dernières campagnes sur {campaigns.length} au total
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modale de confirmation de suppression */}
       {fileToDelete && (
@@ -1997,11 +2400,114 @@ function App() {
               </button>
               <button
                 onClick={() => setFileToDelete(null)}
-                className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 border border-neutral-600"
+                className="flex-1 bg-neutral-600 hover:bg-neutral-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 shadow-sm"
               >
-                Non, annuler
+                Annuler
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de confirmation d'arrêt de campagne */}
+      {campaignToStop && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-neutral-800 border border-neutral-600 rounded-2xl p-8 max-w-md w-full mx-4 animate-slide-up shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">
+                Arrêter la campagne ?
+              </h3>
+              <button
+                onClick={() => setCampaignToStop(null)}
+                className="text-neutral-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-neutral-300 mb-6">Êtes-vous sûr de vouloir arrêter la campagne <span className="text-white font-semibold">{campaignToStop.name}</span> ?</p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  updateCampaignStatus(campaignToStop.id, 'STOPPED');
+                  setCampaignToStop(null);
+                }}
+                disabled={campaignActionLoading[campaignToStop.id]}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              >
+                {campaignActionLoading[campaignToStop.id] ? 'Arrêt...' : 'Oui, arrêter'}
+              </button>
+              <button
+                onClick={() => setCampaignToStop(null)}
+                className="flex-1 bg-neutral-600 hover:bg-neutral-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 shadow-sm"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de confirmation de suppression de campagne */}
+      {campaignToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-neutral-800 border border-neutral-600 rounded-2xl p-8 max-w-md w-full mx-4 animate-slide-up shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">
+                Supprimer la campagne ?
+              </h3>
+              <button
+                onClick={() => setCampaignToDelete(null)}
+                className="text-neutral-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-neutral-300 mb-6">Êtes-vous sûr de vouloir supprimer la campagne <span className="text-white font-semibold">{campaignToDelete.name}</span> ?</p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => deleteCampaign(campaignToDelete.id)}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 shadow-sm"
+              >
+                Oui, supprimer
+              </button>
+              <button
+                onClick={() => setCampaignToDelete(null)}
+                className="flex-1 bg-neutral-600 hover:bg-neutral-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 shadow-sm"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de création de campagne */}
+      {showCreateCampaignModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-neutral-800 border border-neutral-600 rounded-2xl p-8 max-w-2xl w-full mx-4 animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">
+                Créer une nouvelle campagne
+              </h3>
+              <button
+                onClick={() => setShowCreateCampaignModal(false)}
+                className="text-neutral-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <CreateCampaignForm 
+              onSubmit={createCampaign}
+              onCancel={() => setShowCreateCampaignModal(false)}
+              availableFiles={files}
+            />
           </div>
         </div>
       )}
@@ -2239,4 +2745,334 @@ function App() {
   );
 }
 
-export default App; 
+// Composant pour créer une nouvelle campagne
+function CreateCampaignForm({ onSubmit, onCancel, availableFiles }) {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '',
+    totalLeads: '',
+    maxLeadsPerDay: '100',
+    retryAttempts: '3',
+    delayBetweenRequests: '2000',
+    targetLocations: [],
+    targetIndustries: [],
+    files: []
+  });
+
+  const [locationInput, setLocationInput] = useState('');
+  const [industryInput, setIndustryInput] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!formData.name.trim()) {
+      alert('Le nom de la campagne est requis');
+      return;
+    }
+
+    if (!formData.totalLeads || parseInt(formData.totalLeads) <= 0) {
+      alert('Le nombre de leads doit être supérieur à 0');
+      return;
+    }
+
+    onSubmit({
+      ...formData,
+      totalLeads: parseInt(formData.totalLeads),
+      maxLeadsPerDay: parseInt(formData.maxLeadsPerDay),
+      retryAttempts: parseInt(formData.retryAttempts),
+      delayBetweenRequests: parseInt(formData.delayBetweenRequests)
+    });
+  };
+
+  const addLocation = () => {
+    if (locationInput.trim() && !formData.targetLocations.includes(locationInput.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        targetLocations: [...prev.targetLocations, locationInput.trim()]
+      }));
+      setLocationInput('');
+    }
+  };
+
+  const removeLocation = (location) => {
+    setFormData(prev => ({
+      ...prev,
+      targetLocations: prev.targetLocations.filter(l => l !== location)
+    }));
+  };
+
+  const addIndustry = () => {
+    if (industryInput.trim() && !formData.targetIndustries.includes(industryInput.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        targetIndustries: [...prev.targetIndustries, industryInput.trim()]
+      }));
+      setIndustryInput('');
+    }
+  };
+
+  const removeIndustry = (industry) => {
+    setFormData(prev => ({
+      ...prev,
+      targetIndustries: prev.targetIndustries.filter(i => i !== industry)
+    }));
+  };
+
+  const toggleFile = (fileName) => {
+    setFormData(prev => ({
+      ...prev,
+      files: prev.files.includes(fileName)
+        ? prev.files.filter(f => f !== fileName)
+        : [...prev.files, fileName]
+    }));
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Informations de base */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-neutral-300 mb-2">
+            Nom de la campagne *
+          </label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            className="w-full py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="Ex: Campagne Q4 2025"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-neutral-300 mb-2">
+            Description
+          </label>
+          <input
+            type="text"
+            value={formData.description}
+            onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+            className="w-full py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="Description de la campagne"
+          />
+        </div>
+      </div>
+
+      {/* Dates */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-neutral-300 mb-2">
+            Date de début
+          </label>
+          <input
+            type="date"
+            value={formData.startDate}
+            onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
+            className="w-full py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-neutral-300 mb-2">
+            Date de fin (optionnel)
+          </label>
+          <input
+            type="date"
+            value={formData.endDate}
+            onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
+            className="w-full py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+          />
+        </div>
+      </div>
+
+      {/* Configuration des leads */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-neutral-300 mb-2">
+            Nombre total de leads *
+          </label>
+          <input
+            type="number"
+            value={formData.totalLeads}
+            onChange={(e) => setFormData(prev => ({ ...prev, totalLeads: e.target.value }))}
+            className="w-full py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="1000"
+            min="1"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-neutral-300 mb-2">
+            Leads maximum par jour
+          </label>
+          <input
+            type="number"
+            value={formData.maxLeadsPerDay}
+            onChange={(e) => setFormData(prev => ({ ...prev, maxLeadsPerDay: e.target.value }))}
+            className="w-full py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="100"
+            min="1"
+          />
+        </div>
+      </div>
+
+      {/* Configuration technique */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-neutral-300 mb-2">
+            Tentatives de retry
+          </label>
+          <input
+            type="number"
+            value={formData.retryAttempts}
+            onChange={(e) => setFormData(prev => ({ ...prev, retryAttempts: e.target.value }))}
+            className="w-full py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="3"
+            min="1"
+            max="10"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-neutral-300 mb-2">
+            Délai entre requêtes (ms)
+          </label>
+          <input
+            type="number"
+            value={formData.delayBetweenRequests}
+            onChange={(e) => setFormData(prev => ({ ...prev, delayBetweenRequests: e.target.value }))}
+            className="w-full py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="2000"
+            min="500"
+            step="100"
+          />
+        </div>
+      </div>
+
+      {/* Localisations cibles */}
+      <div>
+        <label className="block text-sm font-medium text-neutral-300 mb-2">
+          Localisations cibles (codes département)
+        </label>
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            value={locationInput}
+            onChange={(e) => setLocationInput(e.target.value)}
+            className="flex-1 py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="Ex: 75, 13, 69..."
+            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addLocation())}
+          />
+          <button
+            type="button"
+            onClick={addLocation}
+            className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+          >
+            Ajouter
+          </button>
+        </div>
+        {formData.targetLocations.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {formData.targetLocations.map((location, index) => (
+              <span
+                key={index}
+                className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm"
+              >
+                {location}
+                <button
+                  type="button"
+                  onClick={() => removeLocation(location)}
+                  className="text-blue-300 hover:text-blue-200"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Industries cibles */}
+      <div>
+        <label className="block text-sm font-medium text-neutral-300 mb-2">
+          Industries cibles
+        </label>
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            value={industryInput}
+            onChange={(e) => setIndustryInput(e.target.value)}
+            className="flex-1 py-2.5 px-4 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="Ex: tech, finance, consulting..."
+            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addIndustry())}
+          />
+          <button
+            type="button"
+            onClick={addIndustry}
+            className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+          >
+            Ajouter
+          </button>
+        </div>
+        {formData.targetIndustries.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {formData.targetIndustries.map((industry, index) => (
+              <span
+                key={index}
+                className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-sm"
+              >
+                {industry}
+                <button
+                  type="button"
+                  onClick={() => removeIndustry(industry)}
+                  className="text-green-300 hover:text-green-200"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Fichiers à traiter */}
+      <div>
+        <label className="block text-sm font-medium text-neutral-300 mb-2">
+          Fichiers à traiter
+        </label>
+        <div className="max-h-32 overflow-y-auto space-y-2">
+          {availableFiles.map((file) => (
+            <label key={file.name} className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.files.includes(file.name)}
+                onChange={() => toggleFile(file.name)}
+                className="rounded border-neutral-600 bg-neutral-700 text-accent-500 focus:ring-accent-500"
+              />
+              <span className="text-sm text-neutral-300">{file.name}</span>
+              <span className="text-xs text-neutral-500">({file.totalLines || 0} lignes)</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Boutons d'action */}
+      <div className="flex gap-3 pt-4">
+        <button
+          type="submit"
+          className="flex-1 bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-600 hover:to-accent-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.01] shadow-sm"
+        >
+          Créer la campagne
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 border border-neutral-600"
+        >
+          Annuler
+        </button>
+      </div>
+    </form>
+  );
+}export default App; 
+
