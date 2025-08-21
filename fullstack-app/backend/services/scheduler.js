@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const OpendataService = require('./opendataService');
 const DailyService = require('./dailyService');
 const WhoisService = require('./whoisService');
+const MillionVerifierService = require('./millionVerifierService');
 const FileService = require('./fileService');
 const path = require('path');
 
@@ -10,6 +11,7 @@ class SchedulerService {
         this.opendataService = new OpendataService();
         this.dailyService = new DailyService();
         this.whoisService = new WhoisService(path.join(__dirname, '../data'));
+        this.millionVerifierService = MillionVerifierService;
         this.fileService = new FileService(path.join(__dirname, '../data'));
         
         console.log('🚀 Service de planification démarré');
@@ -28,13 +30,13 @@ class SchedulerService {
         }, {
             timezone: "Europe/Paris"
         });
-        
+            
         console.log('📅 Job Opendata programmé: 1er du mois à 2h00');
     }
 
-    // Téléchargement automatique du fichier de la veille + WHOIS (tous les jours à 7h)
+    // Téléchargement automatique du fichier de la veille + WHOIS + Million Verifier (tous les jours à 2h)
     scheduleDailyYesterdayDownloadAndWhois() {
-        cron.schedule('0 6 * * *', async () => {
+        cron.schedule('0 2 * * *', async () => {
             console.log('🔄 Téléchargement automatique du fichier de la veille (J-1)...');
             try {
                 await this.dailyService.downloadDailyFiles('yesterday');
@@ -46,6 +48,16 @@ class SchedulerService {
                     console.log(`🔍 Lancement du WHOIS sur le fichier: ${yesterdayFile}`);
                     await this.whoisService.analyzeCsvFile(yesterdayFile);
                     console.log(`✅ WHOIS terminé pour: ${yesterdayFile}`);
+
+                    // Lancer le Million Verifier après le WHOIS
+                    console.log(`🔍 Lancement du Million Verifier sur le fichier WHOIS: ${yesterdayFile.replace('_domains.csv', '_whois.csv')}`);
+                    try {
+                        const whoisFilePath = path.join(__dirname, '../data', yesterdayFile.replace('_domains.csv', '_whois.csv'));
+                        await this.millionVerifierService.processCsvFile(whoisFilePath);
+                        console.log(`✅ Million Verifier terminé pour: ${yesterdayFile.replace('_domains.csv', '_whois.csv')}`);
+                    } catch (mvError) {
+                        console.error(`❌ Erreur lors du Million Verifier:`, mvError.message);
+                    }
                 } else {
                     console.log('ℹ️ Aucun fichier de la veille trouvé pour le WHOIS');
                 }
@@ -55,7 +67,7 @@ class SchedulerService {
         }, {
             timezone: "Europe/Paris"
         });
-        console.log('📅 Job téléchargement + WHOIS programmé: tous les jours à 7h00');
+        console.log('📅 Job téléchargement + WHOIS + Million Verifier programmé: tous les jours à 2h00');
     }
 
     // Traitement WHOIS automatique (tous les jours à 8h du matin)
@@ -200,7 +212,7 @@ class SchedulerService {
                     await this.dailyService.downloadDailyFiles(options.mode || 'last7days', options.days);
                     break;
                 case 'dailyAndWhois':
-                    // Téléchargement + WHOIS comme dans la tâche cron
+                    // Téléchargement + WHOIS + Million Verifier comme dans la tâche cron
                     await this.dailyService.downloadDailyFiles('yesterday');
                     console.log('✅ Fichier de la veille téléchargé avec succès');
                     const yesterdayFile = await this.findYesterdayFile();
@@ -208,6 +220,16 @@ class SchedulerService {
                         console.log(`🔍 Lancement du WHOIS sur le fichier: ${yesterdayFile}`);
                         await this.whoisService.analyzeCsvFile(yesterdayFile);
                         console.log(`✅ WHOIS terminé pour: ${yesterdayFile}`);
+
+                        // Lancer le Million Verifier après le WHOIS
+                        console.log(`🔍 Lancement du Million Verifier sur le fichier WHOIS: ${yesterdayFile.replace('_domains.csv', '_whois.csv')}`);
+                        try {
+                            const whoisFilePath = path.join(__dirname, '../data', yesterdayFile.replace('_domains.csv', '_whois.csv'));
+                            await this.millionVerifierService.processCsvFile(whoisFilePath);
+                            console.log(`✅ Million Verifier terminé pour: ${yesterdayFile.replace('_domains.csv', '_whois.csv')}`);
+                        } catch (mvError) {
+                            console.error(`❌ Erreur lors du Million Verifier:`, mvError.message);
+                        }
                     } else {
                         console.log('ℹ️ Aucun fichier de la veille trouvé pour le WHOIS');
                     }
@@ -246,7 +268,7 @@ class SchedulerService {
 // Démarrer le service si ce fichier est exécuté directement
 if (require.main === module) {
     const scheduler = new SchedulerService();
-    scheduler.scheduleOpendataDownload();
+    // scheduler.scheduleOpendataDownload(); // Désactivé - téléchargement automatique de l'opendata
     scheduler.scheduleDailyYesterdayDownloadAndWhois();
     // scheduler.scheduleWhoisProcessing(); // Désactivé car inclus dans la tâche de 7h
     scheduler.scheduleDataCleanup();

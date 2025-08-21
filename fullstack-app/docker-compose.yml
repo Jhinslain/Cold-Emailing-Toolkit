@@ -9,6 +9,9 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - HASHED_PASSWORD=$$2b$$12$$JeVDoAHO57Xu2dT9grzcAejh4y0UAa4ACdub.Fxi5ySRez85GY/Ha
+      - API_MILLION_VERIFIER1=QYBCVHiKud8uHFLn0zHSleNH1
+      - API_MILLION_VERIFIER2=A1rIOeI9PZuwAThBTaQJykder
+      - API_MILLION_VERIFIER3=WI558zGDhfOc1UoNMypZQmy5H
     volumes:
       - ./backend/data:/app/backend/data
       - ./backend/logs:/app/backend/logs

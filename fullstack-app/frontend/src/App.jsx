@@ -85,6 +85,15 @@ function App() {
   const [whoisLoading, setWhoisLoading] = useState(false);
   const [whoisResult, setWhoisResult] = useState(null);
 
+  // États pour MillionVerifier
+  const [millionVerifierLoading, setMillionVerifierLoading] = useState(false);
+  const [millionVerifierResults, setMillionVerifierResults] = useState(null);
+  const [millionVerifierFile, setMillionVerifierFile] = useState(null);
+
+  // États pour afficher plus de fichiers
+  const [filesToShow, setFilesToShow] = useState(9);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   // Ajout de la vérification d'authentification au chargement
   useEffect(() => {
     const checkAuth = async () => {
@@ -222,6 +231,9 @@ function App() {
       
       // Les fichiers contiennent déjà totalLines depuis le registre
       setFiles(uniqueFiles);
+      
+      // Réinitialiser l'affichage des fichiers quand de nouveaux fichiers sont chargés
+      setFilesToShow(9);
       
       // Pré-remplir les métadonnées avec les données du registre
       const initialMetadata = {};
@@ -644,6 +656,8 @@ function App() {
         return 'from-green-600 to-emerald-600 border-green-500'; // Vert foncé pour valides
       case 'daily':
         return 'from-orange-600 to-red-600 border-orange-500'; // Orange pour daily
+      case 'verifier':
+        return 'from-yellow-500 to-amber-500 border-yellow-400'; // Jaune pour Verifier
       case 'classique':
       default:
         return 'from-neutral-500 to-slate-500 border-neutral-400'; // Gris pour classique
@@ -663,6 +677,8 @@ function App() {
         return CheckCircleIcon; // Check pour valides
       case 'daily':
         return ChartBarIcon; // Graphique pour daily
+      case 'verifier':
+        return SparklesIcon; // Étincelles pour Verifier
       case 'classique':
       default:
         return DocumentTextIcon; // Document par défaut
@@ -682,6 +698,8 @@ function App() {
         return 'Valides';
       case 'daily':
         return 'Daily';
+      case 'verifier':
+        return 'Verifier';
       case 'classique':
       default:
         return 'Classique';
@@ -701,6 +719,8 @@ function App() {
         return 'bg-green-600 hover:bg-green-700 border-green-500'; // Vert foncé pour valides
       case 'daily':
         return 'bg-orange-600 hover:bg-orange-700 border-orange-500'; // Orange pour daily
+      case 'verifier':
+        return 'bg-yellow-500 hover:bg-yellow-600 border-yellow-400'; // Jaune pour Verifier
       case 'classique':
       default:
         return 'bg-neutral-600 hover:bg-neutral-700 border-neutral-500'; // Gris pour classique
@@ -749,6 +769,8 @@ function App() {
   const clearSelection = () => {
     setSelectedFiles(new Set());
   };
+
+  // Calcul des fichiers à afficher (plus utilisé, supprimé)
 
   const handleDeleteSelected = async () => {
     if (selectedFiles.size === 0) return;
@@ -1199,10 +1221,49 @@ function App() {
   }
   const success = processed > 0 ? ((emails / processed) * 100).toFixed(1) : 0;
 
+  // Fonction pour lancer la vérification MillionVerifier
+  const handleMillionVerifier = async (file) => {
+    // Met à jour le champ traitement à 'verifier' pour ce fichier
+    setFiles(prevFiles => prevFiles.map(f => f.name === file.name ? { ...f, traitement: 'verifier' } : f));
+    setMillionVerifierLoading(true);
+    setMillionVerifierResults(null);
+    setMillionVerifierFile(file.name);
+    
+    try {
+      // Appel de l'API qui traite le fichier CSV complet
+      const res = await authFetch(`${import.meta.env.VITE_API_URL}/api/millionverifier/process-file`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          inputFileName: file.name
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        showMessage('success', `Fichier traité avec succès ! ${data.stats.valid} emails valides sur ${data.stats.total} total`);
+        setMillionVerifierResults(data.stats);
+        // Recharger la liste des fichiers pour voir le nouveau fichier créé
+        fetchFiles();
+      } else {
+        showMessage('error', data.error || 'Erreur lors du traitement MillionVerifier');
+      }
+    } catch (error) {
+      console.error('Erreur MillionVerifier:', error);
+      showMessage('error', 'Erreur de connexion au serveur');
+    } finally {
+      setMillionVerifierLoading(false);
+      // Remet le champ traitement à vide
+      setFiles(prevFiles => prevFiles.map(f => f.name === file.name ? { ...f, traitement: '' } : f));
+    }
+  };
+
+
   return (
     <div className="min-h-screen relative">
-      {/* Header moderne avec effet de verre */}
-      <header className="glass-card sticky top-0 z-40 border-b border-glass-200">
+             {/* Header moderne avec effet de verre */}
+       <header className="glass-card border-b border-glass-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
@@ -1504,9 +1565,9 @@ function App() {
           {/* BOUTON METTRE À JOUR LES DATES SUPPRIMÉ */}
         </div>
 
-        {/* Barre d'actions pour les fichiers sélectionnés */}
+        {/* Barre d'actions pour les fichiers sélectionnés - Position sticky pour suivre l'écran */}
         {selectedFiles.size > 0 && (
-          <div className="glass-card p-4 mb-6 rounded-xl animate-slide-up">
+          <div className="glass-card p-4 mb-6 rounded-xl animate-slide-up sticky-selection-bar">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <span className="text-white font-medium">
@@ -1564,18 +1625,29 @@ function App() {
             </p>
           </div>
         ) : (
-          // Tri personnalisé : OPENDATA_FR_202505.csv d'abord, puis AFNIC, puis le reste
+          // Tri : OPENDATA_FR_202505.csv en premier, puis par date de modification (plus récents en premier)
           (() => {
             const sortedFiles = [...files].sort((a, b) => {
+              // OPENDATA_FR_202505.csv toujours en premier
               if (a.name === "OPENDATA_FR_202505.csv") return -1;
               if (b.name === "OPENDATA_FR_202505.csv") return 1;
               if (a.type === "afnic" && b.type !== "afnic") return -1;
               if (a.type !== "afnic" && b.type === "afnic") return 1;
-              return 0;
+
+  
+              // Pour le reste, tri par date de modification (plus récents en premier)
+              const dateA = new Date(a.modified);
+              const dateB = new Date(b.modified);
+              return dateB - dateA;
             });
+            // Prendre seulement le nombre de fichiers à afficher
+            const filesToDisplay = sortedFiles.slice(0, filesToShow);
+            const hasMoreFiles = filesToShow < sortedFiles.length;
+            
             return (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {sortedFiles.map((file, index) => {
+              <div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {filesToDisplay.map((file, index) => {
                   const IconComponent = getFileTypeIcon(file);
                   const isSelected = selectedFiles.has(file.name);
                   const whoisJob = whoisJobs[file.name];
@@ -1722,11 +1794,11 @@ function App() {
                   </button>
                 )}
                 
-                {/* Bouton WHOIS - pour tous les fichiers sauf les fichiers WHOIS */}
-                {file.type !== 'whois' && (
+                {/* Bouton WHOIS - pour tous les fichiers sauf les fichiers WHOIS et Verifier */}
+                {file.type !== 'whois' && file.type !== 'verifier' && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleWhoisAnalyze(file); }}
-                    className={`flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white ${getButtonColor(file, 'whois')}`}
+                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-purple-600 hover:bg-purple-700"
                   >
                     <InformationCircleIcon className="h-3 w-3 mr-1" />
                     WHOIS
@@ -1743,9 +1815,19 @@ function App() {
                     Messages
                   </button>
                 )}
+                {/* Bouton MillionVerifier - pour tous les fichiers sauf les fichiers Verifier */}
+                {file.type !== 'verifier' && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMillionVerifier(file); }}
+                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-yellow-500 hover:bg-yellow-600"
+                  >
+                    <SparklesIcon className="h-3 w-3 mr-1" />
+                    MillionVerifier
+                  </button>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleExport(file); }}
-                  className={`flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white ${getButtonColor(file, 'export')}`}
+                  className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
                 >
                   <DocumentArrowDownIcon className="h-3 w-3 mr-1" />
                   Exporter
@@ -1844,6 +1926,41 @@ function App() {
                     </div>
                   );
                 })}
+              </div>
+              
+              {/* Bouton "Voir plus" simple */}
+              {hasMoreFiles && (
+                <div className="flex justify-center mt-8">
+                  <button
+                    onClick={() => {
+                      setLoadingMore(true);
+                      setFilesToShow(prev => prev + 9);
+                      setTimeout(() => setLoadingMore(false), 300);
+                    }}
+                    className="glass-button flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-white hover:scale-105 transition-all duration-200"
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? (
+                      <>
+                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                        <span>Chargement...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Voir plus</span>
+                        <ArrowPathRoundedSquareIcon className="h-5 w-5" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+              
+              {/* Affichage simple du nombre de fichiers */}
+              <div className="flex justify-center mt-4 text-sm text-neutral-300">
+                <span>
+                  Affichage de {filesToDisplay.length} sur {sortedFiles.length} fichiers
+                </span>
+              </div>
               </div>
             );
           })()

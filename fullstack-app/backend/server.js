@@ -257,6 +257,7 @@ const { filterByLocation, getAvailableColumns } = require('./services/filterByLo
 const MergeService = require('./services/mergeService');
 const UpdateDatesService = require('./services/updateDatesService');
 const ImportService = require('./services/importService');
+const millionVerifierService = require('./services/millionVerifierService');
 
 // Instanciation des services
 const opendataService = new OpendataService();
@@ -1405,12 +1406,221 @@ app.post('/api/whois/single', requireAuth, async (req, res) => {
   }
 });
 
+// Route pour vérifier un batch d'emails avec MillionVerifier
+app.post('/api/millionverifier/batch', async (req, res) => {
+  console.log("[BACKEND] Appel /api/millionverifier/batch, body:", req.body);
+  try {
+    const { emails, fileName } = req.body;
+    if (!Array.isArray(emails) || emails.length === 0) {
+      console.log("[BACKEND] Aucun email fourni.");
+      return res.status(400).json({ success: false, error: 'Aucun email fourni.' });
+    }
+    
+    const results = await millionVerifierService.verifyEmailsMillionVerifier(emails);
+    console.log("[BACKEND] Résultats MillionVerifier:", results);
+
+    // Filtrer les bons emails (good, ok selon les critères MillionVerifier)
+    const goodResults = results.filter(r =>
+      r.result && (r.result.status === 'good' || r.result.status === 'ok')
+    );
+
+    // Générer le nom du fichier de sortie
+    const FileService = require('./services/fileService');
+    const fileService = new FileService();
+    let verifierFileName = 'emails_verifier.csv';
+    if (fileName) {
+      // Prendre le nom sans extension et ajouter _verifier.csv
+      const baseName = fileName.replace(/\.[^/.]+$/, '');
+      verifierFileName = baseName + '_verifier.csv';
+    }
+    const outputDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+    const verifierFilePath = path.join(outputDir, verifierFileName);
+    
+    // Supprimer l'ancien fichier s'il existe
+    if (fs.existsSync(verifierFilePath)) {
+      fs.unlinkSync(verifierFilePath);
+    }
+
+    // Utiliser le service MillionVerifier pour traiter le fichier complet et conserver les colonnes
+    if (fileName) {
+      const originalFilePath = path.join(outputDir, fileName);
+      if (fs.existsSync(originalFilePath)) {
+        try {
+          console.log(`[BACKEND] Utilisation du service MillionVerifier pour traiter le fichier complet`);
+          
+          // Utiliser notre service qui conserve toutes les colonnes
+          const result = await millionVerifierService.processCsvFile(originalFilePath);
+          
+          console.log(`[BACKEND] Fichier traité avec succès: ${result.valid} lignes valides sur ${result.total} total`);
+          
+          // Mettre à jour le files-registry.json
+          await fileService.updateFileInfo(verifierFileName, { 
+            type: 'verifier',
+            sourceFile: fileName,
+            totalRows: result.total,
+            validRows: result.valid,
+            invalidRows: result.invalid
+          });
+          
+          res.json({
+            success: true,
+            results,
+            goodCount: result.valid,
+            totalCount: result.total,
+            verifierFile: verifierFileName,
+            message: `Fichier filtré créé avec ${result.valid} emails valides sur ${result.total} total`
+          });
+          return;
+          
+        } catch (error) {
+          console.error(`[BACKEND] Erreur lors du traitement du fichier complet:`, error.message);
+          // Continuer avec la méthode fallback
+        }
+      }
+    }
+    
+    // Fallback : méthode originale si le service échoue
+    let header = '';
+    let filteredLines = [];
+    let writeFallback = false;
+    
+    if (fileName) {
+      const originalFilePath = path.join(outputDir, fileName);
+      if (fs.existsSync(originalFilePath)) {
+        const fileContent = fs.readFileSync(originalFilePath, 'utf8');
+        const lines = fileContent.split(/\r?\n/).filter(l => l.trim() !== '');
+        header = lines[0];
+        const columns = header.split(',').map(col => col.trim().toLowerCase());
+        
+        // Chercher la colonne email (insensible à la casse, espaces ignorés)
+        let emailColIndex = columns.findIndex(col => col.replace(/\s+/g, '') === 'email');
+        if (emailColIndex === -1) {
+          // Essayer d'autres variantes
+          emailColIndex = columns.findIndex(col => col.includes('email'));
+        }
+        
+        if (emailColIndex !== -1) {
+          // Liste des emails "good" ou "ok" (normalisés)
+          const goodEmailsSet = new Set(goodResults.map(r => (r.email || '').trim().toLowerCase()));
+          
+          filteredLines = lines.slice(1).filter(line => {
+            if (!line.trim()) return false;
+            const cells = line.split(',');
+            const email = (cells[emailColIndex] || '').trim().toLowerCase();
+            return goodEmailsSet.has(email);
+          });
+          
+          console.log(`[BACKEND] Filtrage fallback: ${lines.length - 1} lignes totales, ${filteredLines.length} lignes valides`);
+        } else {
+          console.log("[BACKEND] Colonne email non trouvée, utilisation du fallback");
+          writeFallback = true;
+        }
+      } else {
+        console.log("[BACKEND] Fichier d'origine non trouvé, utilisation du fallback");
+        writeFallback = true;
+      }
+    } else {
+      writeFallback = true;
+    }
+    
+    // Si on a pu lire et filtrer, écrire le fichier avec la même structure
+    if (!writeFallback && header && filteredLines.length > 0) {
+      fs.writeFileSync(verifierFilePath, [header, ...filteredLines].join('\n'), 'utf8');
+      console.log(`[BACKEND] Fichier filtré créé avec succès (fallback): ${verifierFileName}`);
+    } else {
+      // Fallback : structure simple avec les résultats de vérification
+      const fallbackHeader = "email,status,quality,subresult\n";
+      const lines = goodResults.map(r =>
+        [
+          r.email,
+          r.result && r.result.result,
+          r.result && r.result.quality,
+          r.result && r.result.subresult
+        ].join(',')
+      );
+      fs.writeFileSync(verifierFilePath, fallbackHeader + lines.join('\n'), 'utf8');
+      console.log("[BACKEND] Fichier fallback créé");
+    }
+    
+    // Mettre à jour le files-registry.json avec type: 'verifier'
+    await fileService.updateFileInfo(verifierFileName, { type: 'verifier' });
+
+    res.json({
+      success: true,
+      results,
+      goodCount: goodResults.length,
+      totalCount: results.length,
+      verifierFile: verifierFileName,
+      message: `Fichier filtré créé avec ${goodResults.length} emails valides sur ${results.length} total`
+    });
+  } catch (error) {
+    console.error("[BACKEND] Erreur MillionVerifier:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Route pour traiter un fichier CSV complet avec MillionVerifier
+app.post('/api/millionverifier/process-file', requireAuth, async (req, res) => {
+  console.log("[BACKEND] Appel /api/millionverifier/process-file, body:", req.body);
+  try {
+    const { inputFileName } = req.body;
+    
+    if (!inputFileName) {
+      return res.status(400).json({ success: false, error: 'Nom du fichier d\'entrée requis.' });
+    }
+    
+    const inputFilePath = path.join(__dirname, 'data', inputFileName);
+    
+    // Vérifier que le fichier d'entrée existe
+    if (!fs.existsSync(inputFilePath)) {
+      return res.status(404).json({ success: false, error: 'Fichier d\'entrée non trouvé.' });
+    }
+    
+    console.log(`[BACKEND] Traitement du fichier: ${inputFilePath}`);
+    
+    // Utiliser le service MillionVerifier pour traiter le fichier complet
+    const result = await millionVerifierService.processCsvFile(inputFilePath);
+    
+    // Extraire le nom du fichier de sortie créé
+    const outputFileName = path.basename(result.outputPath);
+    
+    // Mettre à jour le files-registry.json avec le nouveau fichier de type 'verifier'
+    const FileService = require('./services/fileService');
+    const fileService = new FileService();
+    await fileService.updateFileInfo(outputFileName, { 
+      type: 'verifier',
+      sourceFile: inputFileName,
+      totalRows: result.valid, // Nombre de lignes valides
+      validRows: result.valid,
+      invalidRows: result.invalid,
+      lastUpdated: new Date().toISOString()
+    });
+    
+    res.json({
+      success: true,
+      message: `Fichier traité avec succès`,
+      inputFile: inputFileName,
+      outputFile: outputFileName,
+      stats: result
+    });
+    
+  } catch (error) {
+    console.error("[BACKEND] Erreur traitement fichier MillionVerifier:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Démarrer le service de planification
 const SchedulerService = require('./services/scheduler');
 const scheduler = new SchedulerService();
 scheduler.scheduleOpendataDownload();
 scheduler.scheduleDailyYesterdayDownloadAndWhois();
 scheduler.scheduleDataCleanup();
+
+// Initialiser le service MillionVerifier
+console.log('🚀 Initialisation des services...');
+millionVerifierService.initializeService();
 
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '../frontend/dist');

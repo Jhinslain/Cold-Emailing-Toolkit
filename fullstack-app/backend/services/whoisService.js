@@ -56,7 +56,7 @@ class WhoisAnalyzer {
                 contacts.whois_rdap = this.results.rdap_info;
                 if (this.results.rdap_info.email) {
                     contacts.best_email = this.results.rdap_info.email;
-                    contacts.best_phone = this.results.rdap_info.phone;
+                    contacts.best_phone = this._cleanPhoneNumber(this.results.rdap_info.phone);
                     contacts.source = 'RDAP';
                     console.log(`  ✅ Contact trouvé via RDAP: ${contacts.best_email}`);
                 }
@@ -67,7 +67,7 @@ class WhoisAnalyzer {
                 const whoisContact = this.results.whois_info.registrar_contact;
                 if (whoisContact.email && !this.isBlockedEmail(whoisContact.email)) {
                     contacts.best_email = whoisContact.email;
-                    contacts.best_phone = whoisContact.phone;
+                    contacts.best_phone = this._cleanPhoneNumber(whoisContact.phone);
                     contacts.source = 'WHOIS';
                     console.log(`  ✅ Contact trouvé via WHOIS: ${contacts.best_email}`);
                 }
@@ -154,7 +154,7 @@ class WhoisAnalyzer {
                                         this.results.rdap_info = {
                                             role: role,
                                             email: email,
-                                            phone: tel,
+                                            phone: this._cleanPhoneNumber(tel),
                                             organization: org,
                                             address: adr,
                                             source: rdapUrl,
@@ -173,7 +173,7 @@ class WhoisAnalyzer {
                                 this.results.rdap_info = {
                                     role: role,
                                     email: entity.email,
-                                    phone: entity.phone,
+                                    phone: this._cleanPhoneNumber(entity.phone),
                                     organization: entity.organization,
                                     address: entity.address,
                                     source: rdapUrl,
@@ -231,6 +231,14 @@ class WhoisAnalyzer {
         // Blocage par mot-clé dans l'email (local ou domaine)
         if (BLOCKED_KEYWORDS.some(kw => emailLower.includes(kw))) return true;
         return false;
+    }
+
+    // Méthode utilitaire pour nettoyer les numéros de téléphone
+    _cleanPhoneNumber(phone) {
+        if (!phone) return '';
+        // Supprimer les préfixes comme "tel:", "phone:", etc.
+        const cleaned = phone.toString().replace(/^(tel|phone|telephone):\s*/i, '');
+        return cleaned.trim();
     }
 
     parseWhoisData(whoisData) {
@@ -350,7 +358,7 @@ class WhoisAnalyzer {
                 if (phoneLines.length > 0) {
                     const phoneMatch = phoneLines[0].match(/[\+]?[1-9][\d]{0,15}/);
                     if (phoneMatch) {
-                        registrarContact.phone = phoneMatch[0];
+                        registrarContact.phone = this._cleanPhoneNumber(phoneMatch[0]);
                     }
                 }
             }

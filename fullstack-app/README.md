@@ -41,6 +41,7 @@
 
 ---
 
+
 ## 💻 Commandes utiles AWS/EC2
 
 ### Connexion SSH
@@ -48,7 +49,19 @@
 ssh -i "C:\Users\levre\Documents\domainMajoli.pem" ubuntu@13.60.29.161
 ```
 
-### Transfert du projet
+### Transfert du projet (méthode recommandée avec exclusions)
+```bash
+# Créer une archive tar en excluant les node_modules et data spécifiques
+tar --exclude='fullstack-app/backend/node_modules' --exclude='fullstack-app/backend/data' --exclude='fullstack-app/frontend/node_modules' --exclude='fullstack-app/temp' --exclude='fullstack-app/.git' -czf fullstack-app-clean.tar.gz -C "C:\Users\levre\Majoli\Marketing\SCRIPTS EMAILING PHONING" fullstack-app
+
+# Transférer l'archive
+scp -i "C:\Users\levre\Documents\domainMajoli.pem" fullstack-app-clean.tar.gz ubuntu@13.60.29.161:~/
+
+# Sur le serveur, extraire l'archive
+ssh -i "C:\Users\levre\Documents\domainMajoli.pem" ubuntu@13.60.29.161 "cd ~ && tar -xzf fullstack-app-clean.tar.gz"
+```
+
+### Transfert du projet (méthode simple - inclut tout)
 ```bash
 scp -i "C:\Users\levre\Documents\domainMajoli.pem" -r "C:\Users\levre\Majoli\Marketing\SCRIPTS EMAILING PHONING\fullstack-app" ubuntu@13.60.29.161:~/
 ```
@@ -59,10 +72,6 @@ cd ~/fullstack-app/backend && npm install
 cd ~/fullstack-app/frontend && npm install
 ```
 
-```bash
-sudo docker-compose logs -f
-```
-
 ### Docker Compose (build & lancement)
 ```bash
 cd ~/fullstack-app
@@ -71,6 +80,13 @@ sudo docker-compose build --no-cache
 sudo docker-compose up -d
 sudo docker-compose ps
 ```
+
+### Logs Docker
+```bash
+sudo docker-compose logs -f
+```
+
+// ... existing code ...
 
 ### Vérification de l’espace disque
 

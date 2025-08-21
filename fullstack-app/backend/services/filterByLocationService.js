@@ -28,24 +28,17 @@ function parseCSVLine(line) {
 }
 
 // Fonction pour générer le nom du fichier de sortie basé sur le type de filtre et la valeur
-function generateOutputFileName(originalFileName, filterType, filterValue) {
+function generateOutputFileName(originalFileName, filterType, filterValues) {
     // Extraire le nom de base du fichier original
     const baseName = path.basename(originalFileName, path.extname(originalFileName));
     
-    // Nettoyer la valeur de filtre pour le nom de fichier (remplacer les caractères spéciaux)
-    const cleanFilterValue = filterValue.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    // Nettoyer les valeurs de filtre pour le nom de fichier (remplacer les caractères spéciaux)
+    const cleanFilterValues = filterValues.split(',').map(v => 
+        v.trim().replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+    ).join('_');
     
-    // Format: domain_date1_date2_loc_valeur.csv
-    // Si le nom original contient des dates, les extraire
-    const dateMatch = baseName.match(/(\d{2}-\d{2})_(\d{2}-\d{2})/);
-    if (dateMatch) {
-        const date1 = dateMatch[1];
-        const date2 = dateMatch[2];
-        return `domain_${date1}_${date2}_loc_${cleanFilterValue}.csv`;
-    } else {
-        // Fallback si pas de dates détectées
-        return `domain_loc_${cleanFilterValue}.csv`;
-    }
+    // Format: [nom_fichier_entrée]_loc_[valeurs].csv
+    return `${baseName}_loc_${cleanFilterValues}.csv`;
 }
 
 async function filterByLocation(inputFile, filterType, filterValue) {
@@ -65,8 +58,16 @@ async function filterByLocation(inputFile, filterType, filterValue) {
             throw new Error('Type de filtre invalide. Utilisez: ville, departement, ou region');
         }
 
-        // Générer le nom du fichier de sortie
-        const outputFileName = generateOutputFileName(path.basename(inputFile), filterType, filterValue);
+        // Diviser les valeurs de filtre par virgules et nettoyer
+        const filterValues = filterValue.split(',').map(v => v.trim()).filter(v => v.length > 0);
+        if (filterValues.length === 0) {
+            throw new Error('Aucune valeur de filtre valide fournie');
+        }
+
+        console.log(`🎯 Filtres appliqués: ${filterValues.join(', ')}`);
+
+        // Générer le nom du fichier de sortie avec toutes les valeurs
+        const outputFileName = generateOutputFileName(path.basename(inputFile), filterType, filterValues.join('_'));
         const outputDir = path.join(__dirname, '..', 'data');
         const outputFile = path.join(outputDir, outputFileName);
 
@@ -106,6 +107,7 @@ async function filterByLocation(inputFile, filterType, filterValue) {
             
             let match = false;
             let searchColumn = '';
+            let matchedValue = '';
             
             // Nouvelle logique : parcourir toutes les colonnes candidates
             switch (filterType) {
@@ -115,11 +117,16 @@ async function filterByLocation(inputFile, filterType, filterValue) {
                         const colName = availableColumns[i].toLowerCase();
                         if (colName.includes('locality') || colName.includes('ville') || colName.includes('city')) {
                             const value = (columns[i] || '').toLowerCase();
-                            if (value.includes(filterValue.toLowerCase())) {
-                                match = true;
-                                searchColumn = availableColumns[i];
-                                break;
+                            // Vérifier si la valeur correspond à l'un des filtres
+                            for (const filterVal of filterValues) {
+                                if (value.includes(filterVal.toLowerCase())) {
+                                    match = true;
+                                    searchColumn = availableColumns[i];
+                                    matchedValue = filterVal;
+                                    break;
+                                }
                             }
+                            if (match) break;
                         }
                     }
                     break;
@@ -131,11 +138,17 @@ async function filterByLocation(inputFile, filterType, filterValue) {
                             const value = (columns[i] || '').toString().trim();
                             
                             // Vérifier que c'est un code postal français valide (5 chiffres)
-                            // et qu'il commence par les 2 chiffres du département
-                            if (/^\d{5}$/.test(value) && value.startsWith(filterValue)) {
-                                match = true;
-                                searchColumn = availableColumns[i];
-                                break;
+                            // et qu'il commence par l'un des départements spécifiés
+                            if (/^\d{5}$/.test(value)) {
+                                for (const filterVal of filterValues) {
+                                    if (value.startsWith(filterVal)) {
+                                        match = true;
+                                        searchColumn = availableColumns[i];
+                                        matchedValue = filterVal;
+                                        break;
+                                    }
+                                }
+                                if (match) break;
                             }
                         }
                     }
@@ -146,11 +159,16 @@ async function filterByLocation(inputFile, filterType, filterValue) {
                         const colName = availableColumns[i].toLowerCase();
                         if (colName.includes('region') || colName.includes('state')) {
                             const value = (columns[i] || '').toLowerCase();
-                            if (value.includes(filterValue.toLowerCase())) {
-                                match = true;
-                                searchColumn = availableColumns[i];
-                                break;
+                            // Vérifier si la valeur correspond à l'un des filtres
+                            for (const filterVal of filterValues) {
+                                if (value.includes(filterVal.toLowerCase())) {
+                                    match = true;
+                                    searchColumn = availableColumns[i];
+                                    matchedValue = filterVal;
+                                    break;
+                                }
                             }
+                            if (match) break;
                         }
                     }
                     break;
@@ -174,12 +192,13 @@ async function filterByLocation(inputFile, filterType, filterValue) {
         console.log(`   Total de lignes traitées: ${totalLines.toLocaleString()}`);
         console.log(`   Lignes filtrées: ${filteredLines.toLocaleString()}`);
         console.log(`   Taux de filtrage: ${((filteredLines / totalLines) * 100).toFixed(2)}%`);
+        console.log(`   Filtres appliqués: ${filterValues.join(', ')}`);
         
         if (filteredLines === 0) {
             console.log('\n⚠️ Aucune ligne ne correspond aux critères de filtrage');
             console.log('💡 Suggestions:');
             console.log('   - Vérifiez que le fichier contient des colonnes de localisation');
-            console.log('   - Essayez une valeur de recherche différente');
+            console.log('   - Essayez des valeurs de recherche différentes');
             
             // Afficher toutes les colonnes disponibles pour aider
             if (availableColumns) {
@@ -222,7 +241,8 @@ async function filterByLocation(inputFile, filterType, filterValue) {
                 filteredLines: 0,
                 availableColumns: availableColumns || [],
                 filterType,
-                filterValue
+                filterValue: filterValues.join(', '),
+                filterValues
             };
         }
         
@@ -240,13 +260,13 @@ async function filterByLocation(inputFile, filterType, filterValue) {
         registryService.addLocationFilteredFile(
             path.basename(inputFile), 
             outputFileName, 
-            filterValue, 
+            filterValues.join(', '), 
             filterType
         );
         
         console.log(`\n✅ Fichier filtré sauvegardé: ${outputFileName}`);
         console.log(`📁 Chemin complet: ${outputFile}`);
-        console.log(`📍 Localisation enregistrée: ${filterValue}`);
+        console.log(`📍 Localisations enregistrées: ${filterValues.join(', ')}`);
         console.log('\n🎉 Filtrage terminé avec succès!');
         
         return {
@@ -257,8 +277,9 @@ async function filterByLocation(inputFile, filterType, filterValue) {
             retentionRate: ((filteredLines / totalLines) * 100).toFixed(2),
             outputFile: outputFileName,
             filterType,
-            filterValue,
-            localisation: filterValue
+            filterValue: filterValues.join(', '),
+            filterValues,
+            localisation: filterValues.join(', ')
         };
         
     } catch (error) {
