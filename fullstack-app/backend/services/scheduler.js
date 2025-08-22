@@ -36,8 +36,11 @@ class SchedulerService {
 
     // Téléchargement automatique du fichier de la veille + WHOIS + Million Verifier (tous les jours à 2h)
     scheduleDailyYesterdayDownloadAndWhois() {
-        cron.schedule('0 2 * * *', async () => {
-            console.log('🔄 Téléchargement automatique du fichier de la veille (J-1)...');
+        // Fonction de téléchargement avec retry
+        const downloadWithRetry = async (attempt = 1) => {
+            const currentHour = new Date().getHours();
+            console.log(`🔄 Tentative ${attempt} de téléchargement du fichier de la veille (J-1) à ${currentHour}h...`);
+            
             try {
                 await this.dailyService.downloadDailyFiles('yesterday');
                 console.log('✅ Fichier de la veille téléchargé avec succès');
@@ -61,13 +64,41 @@ class SchedulerService {
                 } else {
                     console.log('ℹ️ Aucun fichier de la veille trouvé pour le WHOIS');
                 }
+                
+                // Succès - arrêter les retry
+                return true;
+                
             } catch (error) {
-                console.error('❌ Erreur lors du téléchargement ou du WHOIS:', error.message);
+                console.error(`❌ Tentative ${attempt} échouée à ${currentHour}h:`, error.message);
+                
+                // Si c'est la dernière tentative de la journée (après 23h), arrêter
+                if (currentHour >= 23) {
+                    console.log('🛑 Dernière tentative de la journée échouée. Arrêt des retry jusqu\'à demain.');
+                    return false;
+                }
+                
+                // Programmer la prochaine tentative dans 1 heure
+                const nextHour = currentHour + 1;
+                console.log(`⏰ Prochaine tentative programmée à ${nextHour}h00`);
+                
+                // Programmer la prochaine tentative
+                setTimeout(() => {
+                    downloadWithRetry(attempt + 1);
+                }, 60 * 60 * 1000); // 1 heure en millisecondes
+                
+                return false;
             }
+        };
+
+        // Démarrer la première tentative à 2h du matin
+        cron.schedule('0 2 * * *', () => {
+            console.log('🌅 Démarrage de la séquence de téléchargement à 2h00...');
+            downloadWithRetry(1);
         }, {
             timezone: "Europe/Paris"
         });
-        console.log('📅 Job téléchargement + WHOIS + Million Verifier programmé: tous les jours à 2h00');
+        
+        console.log('📅 Job téléchargement + WHOIS + Million Verifier programmé: tous les jours à 2h00 avec retry automatique toutes les heures');
     }
 
     // Traitement WHOIS automatique (tous les jours à 8h du matin)

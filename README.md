@@ -13,19 +13,17 @@ Ce système vous permet de :
 
 ---
 
-## 🏗️ Les Trois Composants Principaux
+## 🏗️ Les Trois Composants Principaux (3 la plus importante)
 
 ### 🔍 **Composant 1 : Système de Scoring Multi-API**
 *Dossier : `Scoring_website_hook/`*
 
 **À quoi ça sert pour l'EMAILING et PHONING :**
 - Analyse les performances web de vos prospects
-- Vérifie la validité des emails en masse
 - Génère des hooks personnalisés pour vos campagnes
 - Identifie les sites avec des problèmes de performance (opportunités de vente)
 
 **Fonctionnalités principales :**
-- ✅ Vérification d'emails avec 3 API Million Verifier en parallèle
 - ✅ Analyse des performances web via Google PageSpeed Insights
 - ✅ Génération de messages personnalisés basés sur les scores
 - ✅ Traitement parallèle optimisé pour de gros volumes
@@ -61,7 +59,7 @@ Ce système vous permet de :
 *Dossier : `fullstack-app/`*
 
 **À quoi ça sert pour l'EMAILING et PHONING :**
-- **Interface moderne** pour gérer toutes vos campagnes
+- **Interface moderne** pour gérer toutes les bases de domaines/emails et campagnes
 - **Automatisation complète** du processus de cold emailing journalier
 - **Récupération automatique** des domaines enregistrés la veille
 - **Gestion des campagnes** via API SmartLead avec CRUD complet
@@ -87,26 +85,36 @@ Ce système vous permet de :
 ```bash
 # Tous les jours à 6h00
 # Récupération automatique des domaines enregistrés la veille
-# Extraction des contacts via WHOIS/RDAP
 ```
 
-### **Étape 2 : Qualification des Contacts**
+### **Étape 2 : Enrichissement via WHOIS/RDAP**
+```bash
+# Récupération des données nécessaires :
+# - Emails
+# - Numéros de téléphone
+# - Adresses
+# - Informations d'organisation
+```
+
+### **Étape 3 : Enrichissement via Scraping**
+```bash
+# Collecte de données supplémentaires via web scraping
+# (Fonctionnalité en cours de développement)
+```
+
+### **Étape 4 : Vérification des Contacts**
 ```bash
 # Validation des emails via Million Verifier
 # Filtrage et nettoyage des données
 # Base de contacts qualifiée prête à l'utilisation
 ```
 
-### **Étape 3 : Gestion des Campagnes**
+### **Étape 5 : Gestion des Campagnes**
 ```bash
 # Interface graphique pour gérer vos campagnes SmartLead
 # Création, duplication, mise en pause, lancement
 # Suivi des performances en temps réel
-```
-
-### **Étape 4 : Exécution Automatique**
-```bash
-# Lancement automatique des campagnes de cold emailing
+# Exécution automatique des campagnes de cold emailing
 # Personnalisation basée sur les données extraites
 # Optimisation continue des performances
 ```
@@ -121,42 +129,18 @@ Ce système vous permet de :
 - Connexion Internet
 - Clés API (Million Verifier, SmartLead)
 
-### **Installation**
+### **Installation Principale - Application Fullstack**
 
-#### **1. Scoring Multi-API**
-```bash
-cd Scoring_website_hook
-npm install
-```
-
-#### **2. Traitement des Domaines**
-```bash
-cd Traitement_Domaines_Valides
-npm install
-```
-
-#### **3. Application Fullstack**
+#### **🚀 Application Fullstack)**
 ```bash
 cd fullstack-app
 npm run install-all
+npm run dev          # Développement
+npm run build        # Production
+npm run start        # Lancement production
 ```
 
 ### **Lancement Rapide**
-
-#### **Pour extraire des contacts :**
-```bash
-cd Traitement_Domaines_Valides
-# Double-cliquer sur lancer_traitement.bat
-# Ou lancer : node scripts/run_domaines.cjs
-```
-
-#### **Pour analyser des performances :**
-```bash
-cd Scoring_website_hook
-node master_script.js all
-```
-
-#### **Pour l'application fullstack :**
 ```bash
 cd fullstack-app
 npm run dev          # Développement
@@ -199,14 +183,12 @@ https://nouveau-site.fr,info@nouveau-site.fr,Good,85,"Votre site performe bien (
 ## 🎯 Stratégies Marketing
 
 ### **Emailing Ciblé et Automatisé**
-- **Prospects chauds :** Domaines créés < 6 mois + performance faible
-- **Prospects tièdes :** Domaines créés 6-12 mois + performance moyenne
-- **Prospects froids :** Domaines anciens + performance correcte
+- **Prospects chauds :** Domaines créés < 1 mois ou performance faible
 - **Automatisation :** Envoi quotidien avec personnalisation automatique
 
 ### **Phoning Personnalisé**
 - **Argumentaire basé sur les performances :** "Votre site est noté X/100 par Google"
-- **Argumentaire basé sur l'ancienneté :** "Votre domaine a X mois, c'est le moment d'optimiser"
+- **Argumentaire basé sur l'ancienneté :** "Vous venez d'enregistrer le nom de domaine [domaine.fr], on peut vous accompagner ..."
 - **Argumentaire géographique :** "Je vois que vous êtes dans le [département]"
 
 ---
@@ -248,8 +230,8 @@ API_LIGHTHOUSE3=votre_clé_3
 
 ### **Traitement des Domaines**
 - **10M+ domaines** traités en ~10-30 minutes
-- **Extraction WHOIS :** ~100 domaines/minute
-- **Extraction complète :** ~20 domaines/minute
+- **Extraction WHOIS :** ~300 domaines/heure
+- **Extraction complète :** ~10 domaines/minute
 
 ### **Scoring Multi-API**
 - **3 API en parallèle** pour chaque service
