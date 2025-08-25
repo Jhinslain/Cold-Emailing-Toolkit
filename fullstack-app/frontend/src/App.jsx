@@ -107,7 +107,7 @@ function App() {
   const [campaigns, setCampaigns] = useState([]);
   const [campaignStats, setCampaignStats] = useState(null);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
-  const [showCreateCampaignModal, setShowCreateCampaignModal] = useState(false);
+
   const [campaignToDelete, setCampaignToDelete] = useState(null);
   const [campaignActionLoading, setCampaignActionLoading] = useState({});
 
@@ -123,6 +123,11 @@ function App() {
   const [emailAccountsSaving, setEmailAccountsSaving] = useState(false);
   const [selectedEmailAccounts, setSelectedEmailAccounts] = useState(new Set());
   const [emailAccountsSearchTerm, setEmailAccountsSearchTerm] = useState('');
+  
+  // États pour les fichiers CSV
+  const [csvFiles, setCsvFiles] = useState([]);
+  const [csvFilesLoading, setCsvFilesLoading] = useState(false);
+  const [selectedCsvFile, setSelectedCsvFile] = useState(null);
 
   // Ajout de la vérification d'authentification au chargement
   useEffect(() => {
@@ -324,29 +329,7 @@ function App() {
     }
   };
 
-  const createCampaign = async (campaignData) => {
-    try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(campaignData)
-      });
-      
-      if (response.ok) {
-        const newCampaign = await response.json();
-        setCampaigns(prev => [...prev, newCampaign]);
-        setShowCreateCampaignModal(false);
-        setMessage({ type: 'success', text: 'Campagne créée avec succès' });
-        fetchCampaigns(); // Recharger pour avoir les stats à jour
-      } else {
-        const error = await response.json();
-        setMessage({ type: 'error', text: error.error || 'Erreur lors de la création' });
-      }
-    } catch (error) {
-      console.error('Erreur lors de la création de la campagne:', error);
-      setMessage({ type: 'error', text: 'Erreur de connexion' });
-    }
-  };
+
 
   const updateCampaignStatus = async (campaignId, newStatus) => {
     try {
@@ -460,6 +443,8 @@ function App() {
   const handleImportLeads = (campaign) => {
     setSelectedCampaignForImport(campaign);
     setImportModalOpen(true);
+    // Récupérer la liste des fichiers CSV quand la modale s'ouvre
+    fetchCsvFiles();
   };
 
   const handleImportComplete = (result) => {
@@ -511,6 +496,45 @@ function App() {
       setMessage({ type: 'error', text: 'Erreur de connexion au serveur' });
     } finally {
       setEmailAccountsLoading(false);
+    }
+  };
+
+  // Fonction pour récupérer la liste des fichiers CSV disponibles
+  const fetchCsvFiles = async () => {
+    try {
+      setCsvFilesLoading(true);
+      setSelectedCsvFile(null); // Réinitialiser la sélection
+      console.log('📁 Récupération de la liste des fichiers CSV...');
+      
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/smartlead/csv-files`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Fichiers CSV récupérés:', data.files?.length || 0);
+        const files = data.files || [];
+        setCsvFiles(files);
+        
+        // Pré-sélectionner le fichier le plus récent
+        if (files.length > 0) {
+          const mostRecentFile = files[0]; // Les fichiers sont déjà triés par date (plus récent en premier)
+          setSelectedCsvFile(mostRecentFile);
+          // Mettre à jour la valeur du select
+          setTimeout(() => {
+            const select = document.getElementById('csvFileSelect');
+            if (select) {
+              select.value = mostRecentFile.name;
+            }
+          }, 100);
+        }
+      } else {
+        console.error('❌ Erreur lors de la récupération des fichiers CSV:', response.status);
+        setMessage({ type: 'error', text: 'Impossible de récupérer la liste des fichiers CSV' });
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des fichiers CSV:', error);
+      setMessage({ type: 'error', text: 'Erreur de connexion au serveur' });
+    } finally {
+      setCsvFilesLoading(false);
     }
   };
 
@@ -2356,28 +2380,16 @@ function App() {
       {activeTab === 'campaigns' && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 mb-12">
           <div className="glass-card p-8 rounded-2xl">
-            {/* Section Outils */}
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
-                <UserGroupIcon className="h-6 w-6 mr-3 text-blue-300" />
-                Outils
-              </h2>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowCreateCampaignModal(true)}
-                  className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium"
-                >
-                  <SparklesIcon className="h-6 w-6 mr-3" />
-                  Lancer une campagne
-                </button>
-              </div>
-            </div>
+
 
 
 
             {/* Liste des campagnes */}
             <div>
-              <h3 className="text-xl font-semibold text-white mb-4">Campagnes</h3>
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <UserGroupIcon className="h-6 w-6 mr-3 text-blue-300" />
+                Campagnes
+              </h2>
               {campaignsLoading ? (
                 <div className="text-center py-8">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-300 mx-auto"></div>
@@ -2659,32 +2671,7 @@ function App() {
         </div>
       )}
 
-      {/* Modale de création de campagne */}
-      {showCreateCampaignModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-neutral-800 border border-neutral-600 rounded-2xl p-8 max-w-2xl w-full mx-4 animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">
-                Créer une nouvelle campagne
-              </h3>
-              <button
-                onClick={() => setShowCreateCampaignModal(false)}
-                className="text-neutral-400 hover:text-white transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <CreateCampaignForm 
-              onSubmit={createCampaign}
-              onCancel={() => setShowCreateCampaignModal(false)}
-              availableFiles={files}
-            />
-          </div>
-        </div>
-      )}
+
 
       {/* Modal moderne pour téléchargement quotidiens */}
       {selectedAction === 'daily-download' && (
@@ -2939,42 +2926,115 @@ function App() {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-neutral-300 mb-2">
-                  Fichier CSV à importer
-                </label>
-                <select 
-                  id="csvFileSelect"
-                  className="w-full p-3 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
-                >
-                  <option value="">Sélectionner un fichier...</option>
-                  <option value="20250824_domains.csv">20250824_domains.csv</option>
-                  <option value="20250824_domains_whois.csv">20250824_domains_whois.csv</option>
-                  <option value="Emailing - domain_10-05-2025_28-05-2025_loc_09-11-31-81_2025-07-18T08-27-10.csv">Emailing - domain_10-05-2025_28-05-2025_loc_09-11-31-81_2025-07-18T08-27-10.csv</option>
-                </select>
+                <div className="mb-2">
+                  <label className="block text-sm font-medium text-neutral-300">
+                    Fichier CSV à importer
+                  </label>
+                </div>
+                <div className="relative">
+                  <select 
+                    id="csvFileSelect"
+                    size="6"
+                    className="w-full p-3 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500 overflow-y-auto resize-none csv-file-select"
+                    style={{ 
+                      height: 'auto', 
+                      minHeight: '120px',
+                      maxHeight: '180px'
+                    }}
+                    onChange={(e) => {
+                      // Stocker le fichier sélectionné pour afficher les détails
+                      const selectedFile = csvFiles.find(f => f.name === e.target.value);
+                      if (selectedFile) {
+                        setSelectedCsvFile(selectedFile);
+                      }
+                    }}
+                  >
+                    {csvFilesLoading ? (
+                      <option value="" disabled className="py-2 px-1 text-neutral-500">
+                        ⏳ Chargement des fichiers...
+                      </option>
+                    ) : csvFiles.length === 0 ? (
+                      <option value="" disabled className="py-2 px-1 text-neutral-500">
+                        ❌ Aucun fichier CSV disponible
+                      </option>
+                    ) : (
+                      csvFiles.map((file) => (
+                        <option 
+                          key={file.name} 
+                          value={file.name} 
+                          className="py-2 px-1 hover:bg-neutral-600 border-b border-neutral-600 last:border-b-0"
+                        >
+                          📄 {file.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  
+                  {/* Affichage des détails du fichier sélectionné */}
+                  {selectedCsvFile && (
+                    <div className="mt-3 p-3 bg-neutral-600/50 rounded-lg border border-neutral-500">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium text-white">
+                          📄 {selectedCsvFile.name}
+                        </h4>
+                        <span className="text-xs px-2 py-1 bg-neutral-500 rounded-full text-neutral-200">
+                          {selectedCsvFile.type || 'unknown'}
+                        </span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-3 gap-3 text-xs text-neutral-300">
+                        <div>
+                          <span className="text-neutral-400">📊 Taille:</span>
+                          <br />
+                          <span className="font-medium">{(selectedCsvFile.size / 1024).toFixed(1)} KB</span>
+                        </div>
+                        <div>
+                          <span className="text-neutral-400">📈 Lignes:</span>
+                          <br />
+                          <span className="font-medium">{selectedCsvFile.totalRows || selectedCsvFile.totalLines || 0}</span>
+                        </div>
+                        <div>
+                          <span className="text-neutral-400">📅 Modifié:</span>
+                          <br />
+                          <span className="font-medium">
+                            {selectedCsvFile.modified ? new Date(selectedCsvFile.modified).toLocaleDateString('fr-FR') : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                      {selectedCsvFile.validRows !== undefined && (
+                        <div className="mt-2 pt-2 border-t border-neutral-500">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-green-400">✅ Lignes valides: {selectedCsvFile.validRows}</span>
+                            {selectedCsvFile.invalidRows > 0 && (
+                              <span className="text-red-400">❌ Lignes invalides: {selectedCsvFile.invalidRows}</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-2 pt-2 border-t border-neutral-500">
+                        <div className="text-xs text-neutral-400">
+                          ⚙️ Taille des lots: <span className="text-blue-400 font-medium">50 leads par lot</span> (optimisé pour la fiabilité)
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+    
+                </div>
+                {csvFiles.length > 0 && (
+                  <p className="text-xs text-neutral-500 mt-1">
+                    {csvFiles.length} fichier(s) CSV disponible(s) dans le registre
+                  </p>
+                )}
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-neutral-300 mb-2">
-                  Taille des lots (max 100)
-                </label>
-                <input
-                  id="batchSizeInput"
-                  type="number"
-                  min="1"
-                  max="100"
-                  defaultValue="50"
-                  className="w-full p-3 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
-                />
-                <p className="text-xs text-neutral-500 mt-1">
-                  Nombre de leads traités par lot. Plus le lot est petit, plus l'import est fiable.
-                </p>
-              </div>
+
               
               <div className="flex space-x-3 pt-4">
                 <button
                   onClick={() => {
                     setImportModalOpen(false);
                     setSelectedCampaignForImport(null);
+                    setSelectedCsvFile(null); // Réinitialiser la sélection du fichier
                   }}
                   className="flex-1 bg-neutral-600 hover:bg-neutral-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200"
                 >
@@ -2984,29 +3044,20 @@ function App() {
                   id="importButton"
                   onClick={async () => {
                     const csvFile = document.getElementById('csvFileSelect').value;
-                    const batchSize = document.getElementById('batchSizeInput').value;
                     
                     if (!csvFile) {
                       setMessage({ type: 'error', text: 'Veuillez sélectionner un fichier CSV' });
                       return;
                     }
                     
-                    if (!batchSize || batchSize < 1 || batchSize > 100) {
-                      setMessage({ type: 'error', text: 'Taille des lots invalide (1-100)' });
-                      return;
-                    }
-                    
                     try {
-                      // Construire le chemin complet du fichier
-                      const csvFilePath = `../data/${csvFile}`;
-                      
-                      // Appeler l'API d'import
+                      // Appeler l'API d'import avec le nom du fichier et une taille de lot fixe (50)
                       const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/${selectedCampaignForImport.id}/import-leads`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                          csvFile: csvFilePath,
-                          batchSize: parseInt(batchSize)
+                          csvFile: csvFile,
+                          batchSize: 50 // Taille de lot fixe optimisée
                         })
                       });
                       
@@ -3016,6 +3067,7 @@ function App() {
                           setMessage({ type: 'success', text: `Import terminé avec succès ! ${result.result.success}/${result.result.total} leads importés.` });
                           setImportModalOpen(false);
                           setSelectedCampaignForImport(null);
+                          setSelectedCsvFile(null); // Réinitialiser la sélection du fichier
                           // Rafraîchir la liste des campagnes
                           fetchCampaigns();
                         } else {

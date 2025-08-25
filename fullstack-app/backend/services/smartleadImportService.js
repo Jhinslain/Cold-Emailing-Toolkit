@@ -497,6 +497,35 @@ class SmartleadImportService {
                     throw new Error(`Fichier CSV non trouvé: ${csvFilePath}`);
                 }
                 
+                // Vérifier les métadonnées du fichier dans le registre
+                try {
+                    const registryPath = path.join(__dirname, '../data/files-registry.json');
+                    if (fs.existsSync(registryPath)) {
+                        const registryData = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+                        const fileMetadata = registryData[config.csvFile];
+                        
+                        if (fileMetadata) {
+                            console.log(`📋 Métadonnées du fichier trouvées:`);
+                            console.log(`   📊 Taille: ${fileMetadata.size} bytes`);
+                            console.log(`   📅 Modifié: ${fileMetadata.modified}`);
+                            console.log(`   🏷️ Type: ${fileMetadata.type || 'unknown'}`);
+                            console.log(`   📈 Lignes totales: ${fileMetadata.totalLines || fileMetadata.totalRows || 'N/A'}`);
+                            console.log(`   ✅ Lignes valides: ${fileMetadata.validRows || 'N/A'}`);
+                            console.log(`   ❌ Lignes invalides: ${fileMetadata.invalidRows || 'N/A'}`);
+                            
+                            // Ajuster le nombre max de leads si nécessaire
+                            if (fileMetadata.validRows && config.maxLeads && config.maxLeads > fileMetadata.validRows) {
+                                console.warn(`⚠️ Limite ajustée: ${config.maxLeads} → ${fileMetadata.validRows} (lignes valides disponibles)`);
+                                config.maxLeads = fileMetadata.validRows;
+                            }
+                        } else {
+                            console.warn(`⚠️ Fichier ${config.csvFile} non trouvé dans le registre`);
+                        }
+                    }
+                } catch (registryError) {
+                    console.warn(`⚠️ Erreur lors de la lecture du registre:`, registryError.message);
+                }
+                
                 const importResults = await this.importLeadsFromCsv(
                     campaignId, 
                     csvFilePath, 
@@ -514,8 +543,50 @@ class SmartleadImportService {
         }
     }
 
-    // Lister les fichiers CSV disponibles
-    listAvailableCsvFiles(dataDirectory) {
+    // Lister les fichiers CSV disponibles depuis le registre
+    listAvailableCsvFiles() {
+        try {
+            const path = require('path');
+            const registryPath = path.join(__dirname, '../data/files-registry.json');
+            
+            if (!fs.existsSync(registryPath)) {
+                console.warn(`⚠️ Registre des fichiers non trouvé: ${registryPath}`);
+                return [];
+            }
+            
+            const registryData = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+            
+            // Filtrer les fichiers CSV et ajouter des informations utiles
+            const csvFiles = Object.entries(registryData)
+                .filter(([filename, metadata]) => filename.endsWith('.csv'))
+                .map(([filename, metadata]) => ({
+                    name: filename,
+                    size: metadata.size || 0,
+                    modified: metadata.modified || null,
+                    type: metadata.type || 'unknown',
+                    totalLines: metadata.totalLines || 0,
+                    totalRows: metadata.totalRows || 0,
+                    validRows: metadata.validRows || 0,
+                    invalidRows: metadata.invalidRows || 0,
+                    lastUpdated: metadata.lastUpdated || null
+                }))
+                .sort((a, b) => new Date(b.modified || 0) - new Date(a.modified || 0)); // Plus récents en premier
+            
+            console.log(`📁 ${csvFiles.length} fichiers CSV trouvés dans le registre`);
+            csvFiles.forEach(file => {
+                console.log(`   📄 ${file.name} (${file.size} bytes, ${file.totalRows || file.totalLines || 0} lignes, type: ${file.type})`);
+            });
+            
+            return csvFiles;
+            
+        } catch (error) {
+            console.error(`❌ Erreur lors de la lecture du registre des fichiers:`, error);
+            return [];
+        }
+    }
+
+    // Lister les fichiers CSV disponibles (méthode alternative avec répertoire)
+    listAvailableCsvFilesFromDirectory(dataDirectory) {
         try {
             const files = fs.readdirSync(dataDirectory);
             return files.filter(file => file.endsWith('.csv'));
@@ -568,6 +639,61 @@ class SmartleadImportService {
     isValidEmail(email) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
+    }
+
+    // Obtenir les informations détaillées d'un fichier depuis le registre
+    getFileInfo(filename) {
+        try {
+            const path = require('path');
+            const registryPath = path.join(__dirname, '../data/files-registry.json');
+            
+            if (!fs.existsSync(registryPath)) {
+                console.warn(`⚠️ Registre des fichiers non trouvé: ${registryPath}`);
+                return null;
+            }
+            
+            const registryData = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+            const fileInfo = registryData[filename];
+            
+            if (fileInfo) {
+                return {
+                    name: filename,
+                    size: fileInfo.size || 0,
+                    modified: fileInfo.modified || null,
+                    type: fileInfo.type || 'unknown',
+                    totalLines: fileInfo.totalLines || 0,
+                    totalRows: fileInfo.totalRows || 0,
+                    validRows: fileInfo.validRows || 0,
+                    invalidRows: fileInfo.invalidRows || 0,
+                    lastUpdated: fileInfo.lastUpdated || null,
+                    dates: fileInfo.dates || [],
+                    localisations: fileInfo.localisations || [],
+                    mergedFrom: fileInfo.mergedFrom || []
+                };
+            }
+            
+            return null;
+        } catch (error) {
+            console.error(`❌ Erreur lors de la lecture des informations du fichier ${filename}:`, error);
+            return null;
+        }
+    }
+
+    // Vérifier si un fichier existe dans le registre
+    fileExistsInRegistry(filename) {
+        const fileInfo = this.getFileInfo(filename);
+        return fileInfo !== null;
+    }
+
+    // Obtenir la liste des fichiers par type
+    getFilesByType(type) {
+        try {
+            const allFiles = this.listAvailableCsvFiles();
+            return allFiles.filter(file => file.type === type);
+        } catch (error) {
+            console.error(`❌ Erreur lors du filtrage des fichiers par type ${type}:`, error);
+            return [];
+        }
     }
 }
 

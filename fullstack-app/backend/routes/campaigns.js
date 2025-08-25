@@ -593,26 +593,30 @@ router.get('/smartlead/csv-files', async (req, res) => {
   try {
     const smartleadService = new SmartleadImportService('dummy'); // Pas besoin de vraie clé pour lister les fichiers
     
-    // Répertoire des données
-    const dataDirectory = require('path').join(__dirname, '../data');
-    const csvFiles = smartleadService.listAvailableCsvFiles(dataDirectory);
+    // Utiliser le registre des fichiers au lieu du répertoire
+    const csvFiles = smartleadService.listAvailableCsvFiles();
     
-    // Ajouter des informations sur chaque fichier
-    const fs = require('fs');
-    const fileDetails = csvFiles.map(filename => {
-      const filePath = require('path').join(dataDirectory, filename);
-      const stats = fs.statSync(filePath);
-      return {
-        name: filename,
-        size: stats.size,
-        modified: stats.mtime,
-        path: filePath
-      };
-    }).sort((a, b) => new Date(b.modified) - new Date(a.modified)); // Plus récents en premier
+    if (csvFiles.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Aucun fichier CSV trouvé dans le registre',
+        files: []
+      });
+    }
     
     res.json({
       success: true,
-      files: fileDetails
+      message: `${csvFiles.length} fichier(s) CSV trouvé(s)`,
+      files: csvFiles,
+      summary: {
+        total: csvFiles.length,
+        byType: csvFiles.reduce((acc, file) => {
+          acc[file.type] = (acc[file.type] || 0) + 1;
+          return acc;
+        }, {}),
+        totalRows: csvFiles.reduce((sum, file) => sum + (file.totalRows || file.totalLines || 0), 0),
+        totalValidRows: csvFiles.reduce((sum, file) => sum + (file.validRows || 0), 0)
+      }
     });
     
   } catch (error) {
@@ -966,6 +970,65 @@ router.get('/email-accounts/all', async (req, res) => {
     console.error('❌ Erreur lors de la récupération des comptes email:', error);
     res.status(500).json({ 
       error: 'Erreur lors de la récupération des comptes email',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/campaigns/smartlead/csv-files/:filename - Obtenir les informations détaillées d'un fichier CSV
+router.get('/smartlead/csv-files/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    
+    if (!filename.endsWith('.csv')) {
+      return res.status(400).json({ 
+        error: 'Le fichier doit être un fichier CSV' 
+      });
+    }
+    
+    const smartleadService = new SmartleadImportService('dummy');
+    const fileInfo = smartleadService.getFileInfo(filename);
+    
+    if (!fileInfo) {
+      return res.status(404).json({ 
+        error: 'Fichier non trouvé dans le registre',
+        filename: filename
+      });
+    }
+    
+    res.json({
+      success: true,
+      file: fileInfo
+    });
+    
+  } catch (error) {
+    console.error(`❌ Erreur lors de la récupération des informations du fichier ${req.params.filename}:`, error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la récupération des informations du fichier',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/campaigns/smartlead/csv-files/type/:type - Obtenir les fichiers CSV par type
+router.get('/smartlead/csv-files/type/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    
+    const smartleadService = new SmartleadImportService('dummy');
+    const filesByType = smartleadService.getFilesByType(type);
+    
+    res.json({
+      success: true,
+      type: type,
+      files: filesByType,
+      count: filesByType.length
+    });
+    
+  } catch (error) {
+    console.error(`❌ Erreur lors de la récupération des fichiers de type ${req.params.type}:`, error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la récupération des fichiers par type',
       details: error.message 
     });
   }
