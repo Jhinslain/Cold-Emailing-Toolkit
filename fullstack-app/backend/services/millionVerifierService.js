@@ -4,12 +4,22 @@ const csv = require('csv-parser');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const path = require('path');
 
-// Configuration directe du service
-const API_KEYS = [
+// Configuration dynamique du service
+let API_KEYS = [
   process.env.API_MILLION_VERIFIER1,
   process.env.API_MILLION_VERIFIER2,
   process.env.API_MILLION_VERIFIER3
 ].filter(key => key); // Filtrer les clés vides
+
+// Fonction pour mettre à jour les clés API
+function updateApiKeys() {
+  API_KEYS = [
+    process.env.API_MILLION_VERIFIER1,
+    process.env.API_MILLION_VERIFIER2,
+    process.env.API_MILLION_VERIFIER3
+  ].filter(key => key);
+  console.log(`[SERVICE] Clés API mises à jour: ${API_KEYS.length} clé(s) configurée(s)`);
+}
 
 const MILLION_VERIFIER_URL = 'https://api.millionverifier.com/api/v3/';
 const BATCH_SIZE = 3;
@@ -369,6 +379,9 @@ async function processFile(inputFilePath) {
 function initializeService() {
   console.log('[SERVICE] Initialisation du service MillionVerifier...');
   
+  // Mettre à jour les clés API depuis les variables d'environnement
+  updateApiKeys();
+  
   if (API_KEYS.length === 0) {
     console.warn('[SERVICE] ⚠️  Service MillionVerifier initialisé sans clés API - certaines fonctionnalités ne fonctionneront pas');
     console.warn('[SERVICE] Définissez les variables d\'environnement :');
@@ -388,5 +401,6 @@ module.exports = {
   processFile,
   verifySingleEmail,
   initializeService,
+  updateApiKeys,
   updateFilesRegistry
 }; 

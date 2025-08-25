@@ -11,6 +11,9 @@ require('dotenv').config();
 // Import des routes des campagnes
 const campaignRoutes = require('./routes/campaigns');
 
+// Import des routes des comptes email
+const emailAccountsRoutes = require('./routes/emailAccounts');
+
 // --- CONFIGURATION CORS ---
 const app = express();
 const allowedOrigins = [
@@ -1616,6 +1619,9 @@ app.post('/api/millionverifier/process-file', requireAuth, async (req, res) => {
 
 // Routes des campagnes
 app.use('/api/campaigns', campaignRoutes);
+
+// Routes des comptes email
+app.use('/api/email-accounts', emailAccountsRoutes);
 
 // Démarrer le service de planification
 const SchedulerService = require('./services/scheduler');

@@ -42,7 +42,6 @@ class WhoisAnalyzer {
 
     async analyzeContacts() {
         try {
-            console.log('📞 Analyse des contacts...');
             
             const contacts = {
                 whois_rdap: null,
@@ -82,7 +81,6 @@ class WhoisAnalyzer {
 
     async getWhoisInfo() {
         try {
-            console.log('📄 Récupération des informations WHOIS...');
             
             const whoisData = await whoisLookup(this.domain);
             
@@ -100,9 +98,7 @@ class WhoisAnalyzer {
     }
 
     async getRDAPInfo() {
-        try {
-            console.log('🔍 Récupération des informations RDAP...');
-            
+        try {    
             const rdapSources = [
                 `https://rdap.nic.fr/domain/${this.domain}`,
                 `https://rdap.afnic.fr/domain/${this.domain}`,
@@ -111,7 +107,6 @@ class WhoisAnalyzer {
             
             for (const rdapUrl of rdapSources) {
                 try {
-                    console.log(`  🔍 Test: ${rdapUrl.split('/').pop()}`);
                     const response = await axios.get(rdapUrl, {
                         timeout: 10000,
                         headers: {
@@ -122,7 +117,6 @@ class WhoisAnalyzer {
                     });
                     
                     if (response.status !== 200) {
-                        console.log(`  ❌ Erreur HTTP: ${response.status}`);
                         continue;
                     }
                     
@@ -132,7 +126,6 @@ class WhoisAnalyzer {
                     for (const role of ['registrant', 'administrative', 'tech', 'registrar']) {
                         const entity = rdapData.entities?.find(e => e.roles?.includes(role));
                         if (entity) {
-                            console.log(`    👤 Entité ${role} trouvée`);
                             
                             // VCard
                             const vcard = entity.vcardArray?.[1];
@@ -144,13 +137,9 @@ class WhoisAnalyzer {
                                 
                                 if (email || tel || org || adr) {
                                     console.log(`    📧 Email: ${email || 'Non trouvé'}`);
-                                    console.log(`    📞 Téléphone: ${tel || 'Non trouvé'}`);
-                                    console.log(`    🏢 Organisation: ${org || 'Non trouvé'}`);
-                                    console.log(`    📍 Adresse: ${adr || 'Non trouvé'}`);
                                     
                                     // Vérifier si l'email n'est pas un domaine de protection
                                     if (email && !this.isBlockedEmail(email)) {
-                                        console.log(`    ✅ Email valide (non-protégé): ${email}`);
                                         this.results.rdap_info = {
                                             role: role,
                                             email: email,
@@ -161,9 +150,7 @@ class WhoisAnalyzer {
                                             raw_data: rdapData
                                         };
                                         return; // On a trouvé un contact valide, on arrête
-                                    } else if (email) {
-                                        console.log(`    ⚠️  Email protégé détecté: ${email}`);
-                                    }
+                                    } 
                                 }
                             }
                             
@@ -180,21 +167,17 @@ class WhoisAnalyzer {
                                     raw_data: rdapData
                                 };
                                 return; // On a trouvé un contact valide, on arrête
-                            } else if (entity.email) {
-                                console.log(`    ⚠️  Email direct protégé: ${entity.email}`);
-                            }
+                            } 
                         }
                     }
                     
                 } catch (error) {
-                    console.log(`  ❌ Erreur: ${error.message}`);
+
                 }
             }
             
-            console.log('  ⚠️ Aucune information RDAP trouvée');
             
         } catch (error) {
-            console.log(`  ❌ Erreur générale RDAP: ${error.message}`);
         }
     }
 

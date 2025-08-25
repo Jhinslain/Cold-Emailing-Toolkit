@@ -44,10 +44,6 @@
 
 ## 💻 Commandes utiles AWS/EC2
 
-### Connexion SSH
-```bash
-ssh -i "C:\Users\levre\Documents\domainMajoli.pem" ubuntu@13.60.29.161
-```
 
 ### Transfert du projet (méthode recommandée avec exclusions)
 ```bash
@@ -61,9 +57,9 @@ scp -i "C:\Users\levre\Documents\domainMajoli.pem" fullstack-app-clean.tar.gz ub
 ssh -i "C:\Users\levre\Documents\domainMajoli.pem" ubuntu@13.60.29.161 "cd ~ && tar -xzf fullstack-app-clean.tar.gz"
 ```
 
-### Transfert du projet (méthode simple - inclut tout)
+### Connexion SSH
 ```bash
-scp -i "C:\Users\levre\Documents\domainMajoli.pem" -r "C:\Users\levre\Majoli\Marketing\SCRIPTS EMAILING PHONING\fullstack-app" ubuntu@13.60.29.161:~/
+ssh -i "C:\Users\levre\Documents\domainMajoli.pem" ubuntu@13.60.29.161
 ```
 
 ### Installation des dépendances (sur le serveur)
@@ -118,6 +114,11 @@ cat /etc/nginx/sites-available/domain-processor
 ### Activation HTTPS avec Certbot
 ```bash
 sudo certbot --nginx -d domains.majoli.io
+```
+
+### Transfert du projet (méthode simple - inclut tout)
+```bash
+scp -i "C:\Users\levre\Documents\domainMajoli.pem" -r "C:\Users\levre\Majoli\Marketing\SCRIPTS EMAILING PHONING\fullstack-app" ubuntu@13.60.29.161:~/
 ```
 
 ---

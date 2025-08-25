@@ -111,6 +111,19 @@ function App() {
   const [campaignToDelete, setCampaignToDelete] = useState(null);
   const [campaignActionLoading, setCampaignActionLoading] = useState({});
 
+  // États pour l'import des leads
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [selectedCampaignForImport, setSelectedCampaignForImport] = useState(null);
+
+  // États pour la modal des comptes email
+  const [emailAccountsModalOpen, setEmailAccountsModalOpen] = useState(false);
+  const [selectedCampaignForEmailAccounts, setSelectedCampaignForEmailAccounts] = useState(null);
+  const [emailAccounts, setEmailAccounts] = useState([]);
+  const [emailAccountsLoading, setEmailAccountsLoading] = useState(false);
+  const [emailAccountsSaving, setEmailAccountsSaving] = useState(false);
+  const [selectedEmailAccounts, setSelectedEmailAccounts] = useState(new Set());
+  const [emailAccountsSearchTerm, setEmailAccountsSearchTerm] = useState('');
+
   // Ajout de la vérification d'authentification au chargement
   useEffect(() => {
     const checkAuth = async () => {
@@ -443,9 +456,147 @@ function App() {
     }
   };
 
+  // Fonctions pour l'import des leads
+  const handleImportLeads = (campaign) => {
+    setSelectedCampaignForImport(campaign);
+    setImportModalOpen(true);
+  };
 
+  const handleImportComplete = (result) => {
+    // Rafraîchir la liste des campagnes
+    fetchCampaigns();
+    
+    // Afficher une notification de succès
+    setMessage({ type: 'success', text: `Import terminé avec succès ! ${result.success}/${result.total} leads importés.` });
+    
+    // Fermer le modal
+    setImportModalOpen(false);
+    setSelectedCampaignForImport(null);
+  };
 
+  // Fonction pour gérer l'ouverture de la modal des comptes email
+  const handleEmailAccounts = (campaign) => {
+    setSelectedCampaignForEmailAccounts(campaign);
+    setEmailAccountsModalOpen(true);
+    // Récupérer les comptes email quand la modal s'ouvre
+    fetchEmailAccounts();
+  };
 
+  // Fonction pour gérer la fermeture de la modal des comptes email
+  const handleEmailAccountsClose = () => {
+    setEmailAccountsModalOpen(false);
+    setSelectedCampaignForEmailAccounts(null);
+    setSelectedEmailAccounts(new Set());
+  };
+
+  // Fonction pour récupérer tous les comptes email depuis SmartLeads
+  const fetchEmailAccounts = async () => {
+    try {
+      setEmailAccountsLoading(true);
+      console.log('📧 Récupération de tous les comptes email depuis SmartLeads...');
+      
+      // Récupérer tous les comptes email avec pagination automatique
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/email-accounts/all?limit=1000`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Comptes email récupérés:', data.emailAccounts?.length || 0);
+        setEmailAccounts(data.emailAccounts || []);
+      } else {
+        console.error('❌ Erreur lors de la récupération des comptes email:', response.status);
+        setMessage({ type: 'error', text: 'Impossible de récupérer les comptes email depuis SmartLeads' });
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des comptes email:', error);
+      setMessage({ type: 'error', text: 'Erreur de connexion au serveur' });
+    } finally {
+      setEmailAccountsLoading(false);
+    }
+  };
+
+  // Fonction pour gérer la sélection/désélection d'un compte email
+  const toggleEmailAccountSelection = (accountId) => {
+    setSelectedEmailAccounts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(accountId)) {
+        newSet.delete(accountId);
+      } else {
+        newSet.add(accountId);
+      }
+      return newSet;
+    });
+  };
+
+  // Fonction pour sauvegarder les comptes email sélectionnés à la campagne
+  const handleSaveEmailAccounts = async () => {
+    if (selectedEmailAccounts.size === 0) {
+      setMessage({ type: 'warning', text: 'Aucun compte email sélectionné' });
+      return;
+    }
+
+    if (!selectedCampaignForEmailAccounts) {
+      setMessage({ type: 'error', text: 'Aucune campagne sélectionnée' });
+      return;
+    }
+
+    try {
+      setEmailAccountsSaving(true);
+      setMessage({ type: 'info', text: 'Ajout des comptes email à la campagne...' });
+      
+      const emailAccountIds = Array.from(selectedEmailAccounts);
+      
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/${selectedCampaignForEmailAccounts.id}/email-accounts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email_account_ids: emailAccountIds
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Comptes email ajoutés avec succès:', result);
+        
+        setMessage({ 
+          type: 'success', 
+          text: `${emailAccountIds.length} compte(s) email ajouté(s) avec succès à la campagne "${selectedCampaignForEmailAccounts.name}"` 
+        });
+        
+        // Fermer la modale et réinitialiser la sélection
+        handleEmailAccountsClose();
+        
+        // Optionnel : rafraîchir la liste des campagnes pour voir les changements
+        // fetchCampaigns();
+        
+      } else {
+        const errorData = await response.json();
+        console.error('❌ Erreur lors de l\'ajout des comptes email:', errorData);
+        setMessage({ 
+          type: 'error', 
+          text: `Erreur lors de l'ajout des comptes email: ${errorData.error || 'Erreur serveur'}` 
+        });
+      }
+          } catch (error) {
+        console.error('❌ Erreur lors de l\'ajout des comptes email:', error);
+        setMessage({ 
+          type: 'error', 
+          text: 'Erreur de connexion lors de l\'ajout des comptes email' 
+        });
+      } finally {
+        setEmailAccountsSaving(false);
+      }
+    };
+
+  // Fonction pour sélectionner/désélectionner tous les comptes
+  const toggleAllEmailAccounts = () => {
+    if (selectedEmailAccounts.size === emailAccounts.length) {
+      setSelectedEmailAccounts(new Set());
+    } else {
+      setSelectedEmailAccounts(new Set(emailAccounts.map(account => account.id)));
+    }
+  };
 
   // Fonction pour charger les métadonnées à la demande
   const loadMetadataOnDemand = async (filename) => {
@@ -1784,6 +1935,8 @@ function App() {
           )}
             </div>
 
+  
+
             {/* Section Fichiers */}
             <div className="mt-8 pt-8 border-t border-glass-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-2">
@@ -2275,6 +2428,27 @@ function App() {
                           
                           {/* Boutons d'action avec le style des domaines */}
                           <div className="flex gap-2 mb-4">
+                            {/* Bouton d'import pour les campagnes en brouillon */}
+                            {campaign.status === 'DRAFTED' && (
+                              <button
+                                onClick={() => handleImportLeads(campaign)}
+                                className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium text-green-400 hover:bg-green-500 hover:text-white transition-all duration-200"
+                              >
+                                📥 Importer
+                              </button>
+                            )}
+
+                            {/* Bouton Sender Accounts pour les campagnes en brouillon */}
+                            {campaign.status === 'DRAFTED' && (
+                              <button
+                                onClick={() => handleEmailAccounts(campaign)}
+                                className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium text-gray-400 hover:bg-gray-500 hover:text-white transition-all duration-200"
+                                title="Gérer les comptes email de la campagne"
+                              >
+                                📧 Sender Accounts
+                              </button>
+                            )}
+
                             {/* Bouton pour les campagnes en brouillon */}
                             {campaign.status === 'DRAFTED' && (
                               <button
@@ -2738,6 +2912,343 @@ function App() {
             ) : (
               <div className="text-red-400">Impossible de charger l'aperçu du fichier.</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modale d'import des leads */}
+      {importModalOpen && selectedCampaignForImport && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-neutral-800 border border-neutral-600 rounded-2xl p-8 max-w-2xl w-full mx-4 animate-slide-up shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">
+                Importer des leads
+              </h3>
+              <button
+                onClick={() => {
+                  setImportModalOpen(false);
+                  setSelectedCampaignForImport(null);
+                }}
+                className="text-neutral-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-2">
+                  Fichier CSV à importer
+                </label>
+                <select 
+                  id="csvFileSelect"
+                  className="w-full p-3 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+                >
+                  <option value="">Sélectionner un fichier...</option>
+                  <option value="20250824_domains.csv">20250824_domains.csv</option>
+                  <option value="20250824_domains_whois.csv">20250824_domains_whois.csv</option>
+                  <option value="Emailing - domain_10-05-2025_28-05-2025_loc_09-11-31-81_2025-07-18T08-27-10.csv">Emailing - domain_10-05-2025_28-05-2025_loc_09-11-31-81_2025-07-18T08-27-10.csv</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-2">
+                  Taille des lots (max 100)
+                </label>
+                <input
+                  id="batchSizeInput"
+                  type="number"
+                  min="1"
+                  max="100"
+                  defaultValue="50"
+                  className="w-full p-3 rounded-lg bg-neutral-700 text-white border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
+                />
+                <p className="text-xs text-neutral-500 mt-1">
+                  Nombre de leads traités par lot. Plus le lot est petit, plus l'import est fiable.
+                </p>
+              </div>
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => {
+                    setImportModalOpen(false);
+                    setSelectedCampaignForImport(null);
+                  }}
+                  className="flex-1 bg-neutral-600 hover:bg-neutral-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200"
+                >
+                  Annuler
+                </button>
+                <button
+                  id="importButton"
+                  onClick={async () => {
+                    const csvFile = document.getElementById('csvFileSelect').value;
+                    const batchSize = document.getElementById('batchSizeInput').value;
+                    
+                    if (!csvFile) {
+                      setMessage({ type: 'error', text: 'Veuillez sélectionner un fichier CSV' });
+                      return;
+                    }
+                    
+                    if (!batchSize || batchSize < 1 || batchSize > 100) {
+                      setMessage({ type: 'error', text: 'Taille des lots invalide (1-100)' });
+                      return;
+                    }
+                    
+                    try {
+                      // Construire le chemin complet du fichier
+                      const csvFilePath = `../data/${csvFile}`;
+                      
+                      // Appeler l'API d'import
+                      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/${selectedCampaignForImport.id}/import-leads`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          csvFile: csvFilePath,
+                          batchSize: parseInt(batchSize)
+                        })
+                      });
+                      
+                      if (response.ok) {
+                        const result = await response.json();
+                        if (result.success) {
+                          setMessage({ type: 'success', text: `Import terminé avec succès ! ${result.result.success}/${result.result.total} leads importés.` });
+                          setImportModalOpen(false);
+                          setSelectedCampaignForImport(null);
+                          // Rafraîchir la liste des campagnes
+                          fetchCampaigns();
+                        } else {
+                          setMessage({ type: 'error', text: result.error || 'Erreur lors de l\'import' });
+                        }
+                      } else {
+                        const error = await response.json();
+                        setMessage({ type: 'error', text: error.error || 'Erreur lors de l\'import' });
+                      }
+                    } catch (error) {
+                      console.error('Erreur lors de l\'import:', error);
+                      setMessage({ type: 'error', text: 'Erreur de connexion au serveur' });
+                    }
+                  }}
+                  className="flex-1 bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-600 hover:to-accent-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.01] shadow-sm"
+                >
+                  Importer les leads
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale des comptes email */}
+      {emailAccountsModalOpen && selectedCampaignForEmailAccounts && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-neutral-800 border border-neutral-600 rounded-2xl max-w-6xl w-full mx-4 animate-slide-up shadow-2xl flex flex-col max-h-[90vh]">
+            
+            {/* Header fixe de la modale */}
+            <div className="flex items-center justify-between p-6 border-b border-neutral-600 flex-shrink-0">
+              <div className="flex items-center space-x-4">
+                <h3 className="text-2xl font-bold text-white">
+                  📧 Gérer les comptes email
+                </h3>
+                <div className="h-6 w-px bg-neutral-600"></div>
+                <p className="text-lg text-blue-300 font-semibold">
+                  Campagne : {selectedCampaignForEmailAccounts.name}
+                </p>
+              </div>
+              <button
+                onClick={handleEmailAccountsClose}
+                className="text-neutral-400 hover:text-white transition-colors p-2 hover:bg-neutral-700 rounded-lg"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Contenu principal avec scroll */}
+            <div className="flex-1 overflow-hidden p-6">
+              
+              {/* Section de recherche et filtres */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-white mb-4">
+                  🔍 Recherche et sélection
+                </h4>
+                <div className="flex items-center justify-between p-4 bg-neutral-700/50 rounded-lg border border-neutral-600">
+                  <span className="text-white font-medium">
+                    Total des comptes : <span className="text-blue-300">{emailAccounts.length}</span>
+                    {emailAccounts.length > 0 && (
+                      <span className="text-sm text-neutral-400 ml-2">
+                        (Tous les comptes ont été chargés)
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="text"
+                      placeholder="Rechercher un compte email..."
+                      value={emailAccountsSearchTerm}
+                      onChange={(e) => setEmailAccountsSearchTerm(e.target.value)}
+                      className="px-4 py-2 border rounded-lg bg-neutral-600 text-white border-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-600 rounded-lg transition-colors">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section du tableau avec hauteur fixe et scroll */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-white mb-4">
+                  📋 Liste des comptes email disponibles
+                </h4>
+                
+                {emailAccountsLoading ? (
+                  <div className="flex flex-col items-center justify-center h-32 text-blue-300 bg-neutral-700/30 rounded-lg">
+                    <svg className="animate-spin h-8 w-8 mb-3" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                    <div className="text-center">
+                      <div className="font-medium">Chargement des comptes email...</div>
+                      <div className="text-sm text-neutral-400 mt-1">Récupération de tous les comptes depuis SmartLeads</div>
+                    </div>
+                  </div>
+                ) : emailAccounts.length === 0 ? (
+                  <div className="text-center py-16 text-neutral-400 bg-neutral-700/30 rounded-lg">
+                    <p className="text-lg mb-2">Aucun compte email trouvé</p>
+                    <p className="text-sm">Vérifiez votre configuration SmartLeads</p>
+                  </div>
+                ) : (
+                  <div className="bg-neutral-700/30 rounded-lg border border-neutral-600 overflow-hidden">
+                    {/* Tableau avec hauteur fixe et scroll */}
+                    <div className="max-h-96 overflow-y-auto">
+                      <table className="w-full text-sm text-left text-white">
+                        <thead className="bg-neutral-700 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-6 py-4 text-left font-semibold">
+                              <input
+                                type="checkbox"
+                                checked={selectedEmailAccounts.size === emailAccounts.length && emailAccounts.length > 0}
+                                onChange={toggleAllEmailAccounts}
+                                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                              />
+                            </th>
+                            <th className="px-6 py-4 text-left font-semibold">👤 Nom & Email</th>
+                            <th className="px-6 py-4 text-left font-semibold">🔧 Type</th>
+                            <th className="px-6 py-4 text-left font-semibold">📈 Réputation</th>
+                            <th className="px-6 py-4 text-left font-semibold">⏰ Limite/jour</th>
+                            <th className="px-6 py-4 text-left font-semibold">🟢 Statut</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {emailAccounts
+                            .filter(account => 
+                              account.from_name?.toLowerCase().includes(emailAccountsSearchTerm.toLowerCase()) ||
+                              account.from_email?.toLowerCase().includes(emailAccountsSearchTerm.toLowerCase())
+                            )
+                                                    .map((account) => (
+                        <tr 
+                          key={account.id} 
+                          className={`border-b border-neutral-600 hover:bg-neutral-600/40 transition-colors cursor-pointer ${
+                            selectedEmailAccounts.has(account.id) ? 'bg-blue-600/20 border-blue-500/50' : ''
+                          }`}
+                          onClick={() => toggleEmailAccountSelection(account.id)}
+                        >
+                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedEmailAccounts.has(account.id)}
+                              onChange={() => toggleEmailAccountSelection(account.id)}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <div className="font-medium text-white">{account.from_name || 'Sans nom'}</div>
+                              <div className="text-sm text-neutral-400 flex items-center">
+                                {account.from_email}
+                                <svg className="w-4 h-4 ml-1 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-neutral-400">
+                            {account.type || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              account.warmup_details?.warmup_reputation === '100%' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {account.warmup_details?.warmup_reputation || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-neutral-400">
+                            {account.daily_sent_count || 0} / {account.message_per_day || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              account.is_smtp_success && account.is_imap_success
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {account.is_smtp_success && account.is_imap_success ? 'Connecté' : 'Erreur'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer fixe avec bouton toujours visible */}
+            <div className="flex justify-between items-center p-6 border-t border-neutral-600 bg-neutral-800 flex-shrink-0">
+              <div className="text-sm text-neutral-400">
+                {selectedEmailAccounts.size > 0 
+                  ? `✅ ${selectedEmailAccounts.size} compte(s) sélectionné(s)`
+                  : '⚠️ Aucun compte sélectionné'
+                }
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleEmailAccountsClose}
+                  className="px-4 py-2 text-neutral-400 hover:text-white transition-colors border border-neutral-600 rounded-lg hover:bg-neutral-700"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleSaveEmailAccounts}
+                  disabled={emailAccountsSaving}
+                  className={`px-6 py-2 rounded-lg transition-colors duration-200 font-medium ${
+                    emailAccountsSaving 
+                      ? 'bg-blue-400 text-white cursor-not-allowed' 
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {emailAccountsSaving ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 inline" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Sauvegarde...
+                    </>
+                  ) : (
+                    `💾 Sauvegarder (${selectedEmailAccounts.size})`
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

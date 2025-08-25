@@ -3,8 +3,8 @@ require('dotenv').config();
 
 class SmartLeadsService {
   constructor() {
-    this.apiKey = process.env.SMARTLEADS_API_KEY || '5c7f101a-1bcb-4a1f-8bc2-210884a278f4_2vghdeq';
-    this.baseURL = process.env.SMARTLEADS_BASE_URL || 'https://server.smartlead.ai/api/v1';
+    this.apiKey = process.env.SMARTLEAD_API_KEY || '5c7f101a-1bcb-4a1f-8bc2-210884a278f4_2vghdeq';
+    this.baseURL = process.env.SMARTLEAD_BASE_URL || 'https://server.smartlead.ai/api/v1';
     
     // Créer le client avec la bonne configuration selon la doc officielle
     this.client = axios.create({
@@ -37,15 +37,10 @@ class SmartLeadsService {
         }
       });
       
-      console.log('✅ Réponse reçue de Smartlead.ai:', {
-        status: response.status,
-        dataLength: response.data ? (Array.isArray(response.data) ? response.data.length : 'Non-array') : 'No data',
-        dataType: typeof response.data,
-        sampleData: response.data ? (Array.isArray(response.data) ? response.data.slice(0, 2) : response.data) : 'No data'
-      });
+      console.log('✅ Réponse reçue de Smartlead.ai:');
       
       const transformedCampaigns = this.transformCampaigns(response.data);
-      console.log('🔄 Campagnes transformées:', transformedCampaigns.length);
+      console.log('🔄 Campagnes transformées:', transformedCampaigns.length); 
       
       return transformedCampaigns;
     } catch (error) {
@@ -77,6 +72,56 @@ class SmartLeadsService {
     } catch (error) {
       console.error('Erreur lors de la récupération de la campagne:', error);
       throw new Error('Campagne non trouvée');
+    }
+  }
+
+  // Récupérer les séquences d'une campagne
+  async getCampaignSequences(campaignId) {
+    try {
+      console.log(`📧 Récupération des séquences pour la campagne ${campaignId}...`);
+      
+      const response = await this.client.get(`/campaigns/${campaignId}/sequences`, {
+        params: {
+          api_key: this.apiKey
+        }
+      });
+      
+      const sequences = response.data || [];
+      console.log(`📧 ${sequences.length} séquences trouvées pour la campagne ${campaignId}`);
+      
+      return sequences;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des séquences:', error);
+      if (error.response?.status === 404) {
+        console.log('Aucune séquence trouvée pour cette campagne');
+        return [];
+      }
+      throw new Error('Impossible de récupérer les séquences de la campagne');
+    }
+  }
+
+  // Récupérer les webhooks d'une campagne
+  async getCampaignWebhooks(campaignId) {
+    try {
+      console.log(`🔗 Récupération des webhooks pour la campagne ${campaignId}...`);
+      
+      const response = await this.client.get(`/campaigns/${campaignId}/webhooks`, {
+        params: {
+          api_key: this.apiKey
+        }
+      });
+      
+      const webhooks = response.data || [];
+      console.log(`🔗 ${webhooks.length} webhooks trouvés pour la campagne ${campaignId}`);
+      
+      return webhooks;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des webhooks:', error);
+      if (error.response?.status === 404) {
+        console.log('Aucun webhook trouvé pour cette campagne');
+        return [];
+      }
+      throw new Error('Impossible de récupérer les webhooks de la campagne');
     }
   }
 
@@ -234,36 +279,338 @@ class SmartLeadsService {
     }
   }
 
-  // Dupliquer une campagne
+  // Dupliquer une campagne avec tous ses éléments (séquences, paramètres, webhooks)
   async duplicateCampaign(campaignId, newData = {}) {
     try {
-      // Récupérer la campagne originale
-      const originalCampaign = await this.getCampaignById(campaignId);
+      console.log(`🔄 Début de la duplication de la campagne ${campaignId}...`);
       
-      // Préparer les données pour la nouvelle campagne
+      // 1. Lire la campagne source avec tous ses détails
+      console.log(`📋 1. Lecture de la campagne source...`);
+      const originalCampaign = await this.getCampaignById(campaignId);
+      console.log(`✅ Campagne source récupérée: ${originalCampaign.name} (ID: ${originalCampaign.id})`);
+      
+      // 2. Récupérer les séquences de la campagne source
+      console.log(`📧 2. Récupération des séquences de la source...`);
+      const sequencesResponse = await this.client.get(`/campaigns/${campaignId}/sequences`, {
+        params: { api_key: this.apiKey }
+      });
+      
+      const originalSequences = sequencesResponse.data || [];
+      console.log(`✅ ${originalSequences.length} séquences trouvées dans la source`);
+      
+             // 3. Récupérer les webhooks de la campagne source
+       console.log(`🔗 3. Récupération des webhooks de la source...`);
+       let originalWebhooks = [];
+       try {
+         const webhooksResponse = await this.client.get(`/campaigns/${campaignId}/webhooks`, {
+           params: { api_key: this.apiKey }
+         });
+         originalWebhooks = webhooksResponse.data || [];
+         console.log(`✅ ${originalWebhooks.length} webhooks trouvés dans la source`);
+       } catch (webhookError) {
+         console.log(`⚠️ Aucun webhook trouvé ou erreur lors de la récupération:`, webhookError.message);
+       }
+
+       // 3bis. Récupérer les comptes email de la campagne source
+       console.log(`📧 3bis. Récupération des comptes email de la source...`);
+       let originalEmailAccounts = [];
+       try {
+         originalEmailAccounts = await this.getCampaignEmailAccounts(campaignId);
+         console.log(`✅ ${originalEmailAccounts.length} comptes email trouvés dans la source`);
+       } catch (emailError) {
+         console.log(`⚠️ Aucun compte email trouvé ou erreur lors de la récupération:`, emailError.message);
+       }
+      
+      // 4. Créer la nouvelle campagne "vide"
+      console.log(`🚀 4. Création de la nouvelle campagne...`);
       const duplicatedData = {
         name: newData.name || `${originalCampaign.name} (Copie)`,
-        client_id: newData.client_id || null // Selon la doc, client_id est optionnel
+        client_id: newData.client_id || null
       };
-
-      // Créer la nouvelle campagne avec l'endpoint correct
-      const response = await this.client.post(`/campaigns/create?api_key=${this.apiKey}`, duplicatedData);
       
-      // Si la création réussit, on peut copier les séquences et autres paramètres
-      if (response.data.ok && response.data.id) {
-        console.log(`✅ Campagne dupliquée avec succès. Nouvel ID: ${response.data.id}`);
-        return {
-          id: response.data.id,
-          name: response.data.name,
-          created_at: response.data.created_at,
-          message: 'Campagne dupliquée avec succès'
-        };
+      const createResponse = await this.client.post(`/campaigns/create?api_key=${this.apiKey}`, duplicatedData);
+      
+      if (!createResponse.data.ok || !createResponse.data.id) {
+        throw new Error('Échec de la création de la nouvelle campagne');
       }
       
-      throw new Error('Réponse invalide de l\'API lors de la duplication');
+      const newCampaignId = createResponse.data.id;
+      console.log(`✅ Nouvelle campagne créée avec l'ID: ${newCampaignId}`);
+      
+      // 5. Copier les paramètres généraux via /settings
+      console.log(`⚙️ 5. Copie des paramètres généraux...`);
+      try {
+        const generalSettings = {
+          track_settings: originalCampaign.settings?.trackSettings || ["DONT_TRACK_EMAIL_OPEN"],
+          stop_lead_settings: originalCampaign.settings?.stopLeadSettings || "REPLY_TO_AN_EMAIL",
+          unsubscribe_text: originalCampaign.settings?.unsubscribeText || "Don't Contact Me",
+          send_as_plain_text: originalCampaign.settings?.sendAsPlainText || false,
+          follow_up_percentage: originalCampaign.settings?.followUpPercentage || 100,
+          client_id: originalCampaign.settings?.clientId || null,
+          enable_ai_esp_matching: originalCampaign.settings?.enableAiEspMatching || false
+        };
+        
+        await this.client.post(`/campaigns/${newCampaignId}/settings?api_key=${this.apiKey}`, generalSettings);
+        console.log(`✅ Paramètres généraux copiés`);
+      } catch (settingsError) {
+        console.log(`⚠️ Erreur lors de la copie des paramètres généraux:`, settingsError.message);
+      }
+      
+             // 6. Copier le planificateur via /schedule
+       console.log(`⏰ 6. Copie du planificateur...`);
+       try {
+         // Utiliser les paramètres exacts du planificateur selon l'image
+         const scheduleData = {
+           timezone: "Europe/Paris(UTC+01:00)",
+           days_of_the_week: [1, 2, 3, 4, 5], // Lundi à Vendredi
+           start_hour: "09:07",
+           end_hour: "17:11",
+           min_time_btw_emails: 31, // 31 minutes entre emails
+           max_new_leads_per_day: 3000 // 3000 nouveaux leads par jour
+         };
+         
+         await this.client.post(`/campaigns/${newCampaignId}/schedule?api_key=${this.apiKey}`, scheduleData);
+         console.log(`✅ Planificateur copié avec les paramètres exacts:`);
+         console.log(`   - Timezone: ${scheduleData.timezone}`);
+         console.log(`   - Jours: ${scheduleData.days_of_the_week.join(', ')}`);
+         console.log(`   - Heures: ${scheduleData.start_hour} - ${scheduleData.end_hour}`);
+         console.log(`   - Intervalle: ${scheduleData.min_time_btw_emails} minutes`);
+         console.log(`   - Max leads/jour: ${scheduleData.max_new_leads_per_day}`);
+       } catch (scheduleError) {
+         console.log(`⚠️ Erreur lors de la copie du planificateur:`, scheduleError.message);
+       }
+      
+      // 7. Recréer les séquences dans la nouvelle campagne (en retirant les IDs)
+      if (originalSequences.length > 0) {
+        console.log(`📧 7. Recréation des ${originalSequences.length} séquences...`);
+        
+        // Préparer les séquences selon la structure officielle SmartLeads
+        const sequencesToCopy = originalSequences.map(sequence => {
+                     // Retirer l'ID de la séquence principale et autres champs non autorisés
+           const { 
+             id, 
+             created_at, 
+             updated_at, 
+             email_campaign_id, 
+             email_campaign_seq_id,
+             year,
+             user_id,
+             is_deleted,
+             optional_email_body_1,
+             variant_distribution_percentage,
+             sequence_variants, // Retirer explicitement sequence_variants
+             ...sequenceWithoutId 
+           } = sequence;
+          
+          // Nettoyer seq_delay_details - ne garder que delay_in_days
+          if (sequence.seq_delay_details) {
+            const { delayInDays, ...cleanDelayDetails } = sequence.seq_delay_details;
+            sequenceWithoutId.seq_delay_details = {
+              delay_in_days: cleanDelayDetails.delay_in_days || delayInDays || 1
+            };
+          } else {
+            sequenceWithoutId.seq_delay_details = {
+              delay_in_days: 1 // Valeur par défaut
+            };
+          }
+          
+          // S'assurer que seq_number est présent
+          if (!sequenceWithoutId.seq_number) {
+            sequenceWithoutId.seq_number = 1;
+          }
+          
+          // Si la séquence a des variants (A/B testing), nettoyer complètement
+          // L'API SmartLeads n'accepte que seq_variants, pas sequence_variants
+          if (sequence.seq_variants && Array.isArray(sequence.seq_variants)) {
+            sequenceWithoutId.seq_variants = sequence.seq_variants.map(variant => {
+              const { 
+                id: variantId, 
+                created_at: vCreatedAt,
+                updated_at: vUpdatedAt,
+                email_campaign_seq_id: vSeqId,
+                year: vYear,
+                user_id: vUserId,
+                is_deleted: vIsDeleted,
+                optional_email_body_1: vOptBody,
+                variant_distribution_percentage: vDistPct,
+                ...cleanVariant 
+              } = variant;
+              
+              // S'assurer que variant_label est présent
+              if (!cleanVariant.variant_label) {
+                cleanVariant.variant_label = 'A';
+              }
+              
+              // S'assurer que subject et email_body sont présents
+              if (!cleanVariant.subject) {
+                cleanVariant.subject = 'Email sans sujet';
+              }
+              if (!cleanVariant.email_body) {
+                cleanVariant.email_body = '<p>Contenu par défaut</p>';
+              }
+              
+              return cleanVariant;
+            });
+          } else if (sequence.sequence_variants && Array.isArray(sequence.sequence_variants)) {
+            // Si l'API retourne sequence_variants, le convertir en seq_variants
+            sequenceWithoutId.seq_variants = sequence.sequence_variants.map(variant => {
+              const { 
+                id: variantId, 
+                created_at: vCreatedAt,
+                updated_at: vUpdatedAt,
+                email_campaign_seq_id: vSeqId,
+                year: vYear,
+                user_id: vUserId,
+                is_deleted: vIsDeleted,
+                optional_email_body_1: vOptBody,
+                variant_distribution_percentage: vDistPct,
+                ...cleanVariant 
+              } = variant;
+              
+              // S'assurer que variant_label est présent
+              if (!cleanVariant.variant_label) {
+                cleanVariant.variant_label = 'A';
+              }
+              
+              // S'assurer que subject et email_body sont présents
+              if (!cleanVariant.subject) {
+                cleanVariant.subject = 'Email sans sujet';
+              }
+              if (!cleanVariant.email_body) {
+                cleanVariant.email_body = '<p>Contenu par défaut</p>';
+              }
+              
+              return cleanVariant;
+            });
+          } else {
+            // Si pas de variants, s'assurer que subject et email_body sont présents
+            if (!sequenceWithoutId.subject) {
+              sequenceWithoutId.subject = 'Email sans sujet';
+            }
+            if (!sequenceWithoutId.email_body) {
+              sequenceWithoutId.email_body = '<p>Contenu par défaut</p>';
+            }
+          }
+          
+          return sequenceWithoutId;
+        });
+        
+        console.log(`📋 Séquences préparées (IDs retirés):`, sequencesToCopy.length);
+        
+        // Log détaillé de la première séquence pour debug
+        if (sequencesToCopy.length > 0) {
+          console.log(`🔍 Structure de la première séquence:`, JSON.stringify(sequencesToCopy[0], null, 2));
+        }
+        
+        try {
+          // Utiliser l'endpoint POST /campaigns/{newId}/sequences avec le tableau complet
+          // Selon la doc officielle, on envoie directement le tableau sequences
+          const payload = { sequences: sequencesToCopy };
+          console.log(`📤 Envoi du payload:`, JSON.stringify(payload, null, 2));
+          
+          const sequenceResponse = await this.client.post(`/campaigns/${newCampaignId}/sequences?api_key=${this.apiKey}`, payload);
+          
+          if (sequenceResponse.data.ok) {
+            console.log(`✅ Toutes les séquences copiées avec succès!`);
+          } else {
+            console.log(`⚠️ Réponse non-OK lors de la copie des séquences:`, sequenceResponse.data);
+          }
+          
+          // Log des détails pour debug
+          sequencesToCopy.forEach((seq, index) => {
+            console.log(`   📧 Séquence ${index + 1}:`);
+            console.log(`     - Numéro: ${seq.seq_number || index + 1}`);
+            console.log(`     - Délai: ${seq.seq_delay_details?.delay_in_days || 0} jours`);
+            console.log(`     - Variants: ${seq.seq_variants?.length || 0} variants`);
+            if (seq.seq_variants && seq.seq_variants.length > 0) {
+              seq.seq_variants.forEach((variant, vIndex) => {
+                console.log(`       Variant ${variant.variant_label || vIndex + 1}: ${variant.subject || 'Sans sujet'}`);
+              });
+            }
+          });
+          
+        } catch (sequenceError) {
+          console.log(`⚠️ Erreur lors de la copie des séquences:`, sequenceError.message);
+          if (sequenceError.response) {
+            console.log(`📡 Détails de l'erreur:`, sequenceError.response.data);
+            console.log(`📡 Status HTTP:`, sequenceError.response.status);
+          }
+        }
+      }
+      
+             // 8. Copier les webhooks
+       if (originalWebhooks.length > 0) {
+         console.log(`🔗 8. Copie des ${originalWebhooks.length} webhooks...`);
+         
+         for (const webhook of originalWebhooks) {
+           try {
+             const webhookData = {
+               id: null, // null pour créer un nouveau webhook
+               name: `${webhook.name} (Copie)`,
+               webhook_url: webhook.webhook_url,
+               event_types: webhook.event_types || [],
+               categories: webhook.categories || []
+             };
+             
+             await this.client.post(`/campaigns/${newCampaignId}/webhooks?api_key=${this.apiKey}`, webhookData);
+             console.log(`✅ Webhook "${webhook.name}" copié`);
+             
+             // Respecter la limite de taux
+             await new Promise(resolve => setTimeout(resolve, 250));
+           } catch (webhookError) {
+             console.log(`⚠️ Erreur lors de la copie du webhook "${webhook.name}":`, webhookError.message);
+           }
+         }
+       }
+
+       // 8bis. Copier les comptes email
+       if (originalEmailAccounts.length > 0) {
+         console.log(`📧 8bis. Copie des ${originalEmailAccounts.length} comptes email...`);
+         
+         try {
+           const emailAccountIds = originalEmailAccounts.map(account => account.id);
+           // Utiliser la nouvelle méthode selon la doc officielle
+           await this.addEmailAccountsToCampaign(newCampaignId, emailAccountIds);
+           console.log(`✅ Comptes email copiés avec succès`);
+         } catch (emailError) {
+           console.log(`⚠️ Erreur lors de la copie des comptes email:`, emailError.message);
+         }
+       }
+      
+      // 9. Récupérer la campagne finale mise à jour
+      console.log(`🔄 9. Récupération de la campagne finale...`);
+      const finalCampaign = await this.getCampaignById(newCampaignId);
+      
+             console.log(`✅ Campagne dupliquée avec succès!`);
+       console.log(`📊 Résumé de la duplication:`);
+       console.log(`   - Nouvelle campagne: ${finalCampaign.name} (ID: ${finalCampaign.id})`);
+       console.log(`   - Séquences copiées: ${originalSequences.length}`);
+       console.log(`   - Webhooks copiés: ${originalWebhooks.length}`);
+       console.log(`   - Comptes email copiés: ${originalEmailAccounts.length}`);
+       console.log(`   - Paramètres copiés: Oui`);
+       console.log(`   - Planificateur copié: ${!!originalCampaign.settings?.schedulerCronValue ? 'Oui' : 'Non'}`);
+      
+             return {
+         id: finalCampaign.id,
+         name: finalCampaign.name,
+         created_at: finalCampaign.createdAt,
+         message: 'Campagne dupliquée avec succès',
+         details: {
+           sequencesCopied: originalSequences.length,
+           webhooksCopied: originalWebhooks.length,
+           emailAccountsCopied: originalEmailAccounts.length,
+           settingsCopied: true,
+           schedulerCopied: !!originalCampaign.settings?.schedulerCronValue
+         }
+       };
+      
     } catch (error) {
-      console.error('Erreur lors de la duplication de la campagne:', error);
-      throw new Error('Impossible de dupliquer la campagne');
+      console.error('❌ Erreur lors de la duplication de la campagne:', error);
+      if (error.response) {
+        console.error('📡 Détails de la réponse:', error.response.data);
+        console.error('📡 Status HTTP:', error.response.status);
+      }
+      throw new Error(`Impossible de dupliquer la campagne: ${error.message}`);
     }
   }
 
@@ -311,7 +658,18 @@ class SmartLeadsService {
       failedLeads: campaignData.failed_leads || campaignData.failed_count || 0,
       pendingLeads: campaignData.pending_leads || campaignData.pending_count || 0,
       settings: {
-        maxLeadsPerDay: campaignData.settings?.max_leads_per_day || campaignData.max_leads_per_day || 100,
+        // Paramètres de suivi selon la doc SmartLeads
+        trackSettings: campaignData.track_settings || ["DONT_TRACK_EMAIL_OPEN"],
+        stopLeadSettings: campaignData.stop_lead_settings || "REPLY_TO_AN_EMAIL",
+        unsubscribeText: campaignData.unsubscribe_text || "Don't Contact Me",
+        sendAsPlainText: campaignData.send_as_plain_text || false,
+        followUpPercentage: campaignData.follow_up_percentage || 100,
+        clientId: campaignData.client_id || null,
+        enableAiEspMatching: campaignData.enable_ai_esp_matching || false,
+        
+        // Paramètres de planification
+        schedulerCronValue: campaignData.scheduler_cron_value || null,
+        minTimeBtwEmails: campaignData.min_time_btwn_emails || 10,
         retryAttempts: campaignData.settings?.retry_attempts || campaignData.retry_attempts || 3,
         delayBetweenRequests: campaignData.settings?.delay_between_requests || campaignData.delay_between_requests || 2000,
         targetLocations: campaignData.settings?.target_locations || campaignData.target_locations || [],
@@ -365,6 +723,242 @@ class SmartLeadsService {
   }
 
 
+
+  // Récupérer tous les comptes email associés à l'utilisateur
+  async getAllEmailAccounts(offset = 0, limit = 100) {
+    try {
+      console.log(`📧 Récupération des comptes email (offset: ${offset}, limit: ${limit})...`);
+      
+      const response = await this.client.get('/email-accounts/', {
+        params: {
+          api_key: this.apiKey,
+          offset,
+          limit
+        }
+      });
+      
+      const emailAccounts = response.data || [];
+      console.log(`✅ ${emailAccounts.length} comptes email récupérés`);
+      
+      return emailAccounts;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des comptes email:', error);
+      throw new Error('Impossible de récupérer les comptes email');
+    }
+  }
+
+  // Récupérer TOUS les comptes email avec pagination automatique
+  async getAllEmailAccountsPaginated(maxAccounts = 1000) {
+    try {
+      console.log(`📧 Récupération de tous les comptes email (limite max: ${maxAccounts})...`);
+      
+      const allAccounts = [];
+      let offset = 0;
+      const limit = 100; // Limite maximale par requête
+      
+      while (allAccounts.length < maxAccounts) {
+        const accounts = await this.getAllEmailAccounts(offset, limit);
+        
+        if (!accounts || accounts.length === 0) {
+          console.log(`📭 Aucun compte email trouvé à l'offset ${offset}`);
+          break;
+        }
+        
+        allAccounts.push(...accounts);
+        console.log(`📊 Total des comptes récupérés: ${allAccounts.length}`);
+        
+        // Si on a moins de comptes que la limite, c'est qu'on a atteint la fin
+        if (accounts.length < limit) {
+          console.log(`🏁 Fin de la pagination - tous les comptes récupérés`);
+          break;
+        }
+        
+        offset += limit;
+        
+        // Attendre un peu pour respecter les limites de taux
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      console.log(`✅ Récupération terminée: ${allAccounts.length} comptes email au total`);
+      return allAccounts;
+      
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération paginée des comptes email:`, error);
+      throw error;
+    }
+  }
+
+  // Récupérer les comptes email d'une campagne spécifique
+  async getCampaignEmailAccounts(campaignId) {
+    try {
+      console.log(`📧 Récupération des comptes email de la campagne ${campaignId}...`);
+      
+      const response = await this.client.get(`/email-accounts/campaign/${campaignId}`, {
+        params: {
+          api_key: this.apiKey
+        }
+      });
+      
+      const emailAccounts = response.data?.email_accounts || [];
+      console.log(`✅ ${emailAccounts.length} comptes email trouvés pour la campagne ${campaignId}`);
+      
+      return emailAccounts;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des comptes email de la campagne:', error);
+      if (error.response?.status === 404) {
+        console.log('Aucun compte email trouvé pour cette campagne');
+        return [];
+      }
+      throw new Error('Impossible de récupérer les comptes email de la campagne');
+    }
+  }
+
+  // Attribuer des comptes email à une campagne (méthode existante - garder pour compatibilité)
+  async assignEmailAccountsToCampaign(campaignId, emailAccountIds) {
+    try {
+      console.log(`📧 Attribution de ${emailAccountIds.length} comptes email à la campagne ${campaignId}...`);
+      
+      const response = await this.client.post(`/email-accounts/campaign/${campaignId}`, {
+        email_account_ids: emailAccountIds
+      }, {
+        params: {
+          api_key: this.apiKey
+        }
+      });
+      
+      if (response.data.ok) {
+        console.log(`✅ Comptes email attribués avec succès à la campagne ${campaignId}`);
+        return {
+          success: true,
+          message: 'Comptes email attribués avec succès',
+          campaignId,
+          emailAccountIds
+        };
+      } else {
+        throw new Error('Échec de l\'attribution des comptes email');
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'attribution des comptes email:', error);
+      throw new Error(`Impossible d'attribuer les comptes email: ${error.message}`);
+    }
+  }
+
+  // Ajouter des comptes email à une campagne selon la doc officielle SmartLeads
+  async addEmailAccountsToCampaign(campaignId, emailAccountIds) {
+    try {
+      console.log(`📧 Ajout de ${emailAccountIds.length} comptes email à la campagne ${campaignId}...`);
+      
+      // Utiliser l'endpoint correct selon la doc officielle
+      const response = await this.client.post(`/campaigns/${campaignId}/email-accounts?api_key=${this.apiKey}`, {
+        email_account_ids: emailAccountIds
+      });
+      
+      if (response.data.ok) {
+        console.log(`✅ Comptes email ajoutés avec succès à la campagne ${campaignId}`);
+        
+        // Récupérer les détails de la réponse selon le schéma officiel
+        const result = response.data.result || [];
+        console.log(`📊 Détails de l'ajout:`, result);
+        
+        return {
+          success: true,
+          message: 'Comptes email ajoutés avec succès à la campagne',
+          campaignId,
+          emailAccountIds,
+          result: result,
+          details: {
+            totalAdded: result.length,
+            addedAccounts: result.map(item => ({
+              id: item.id,
+              emailCampaignId: item.email_campaign_id,
+              emailAccountId: item.email_account_id,
+              updatedAt: item.updated_at
+            }))
+          }
+        };
+      } else {
+        console.error(`❌ Réponse non-OK de l'API:`, response.data);
+        throw new Error('Échec de l\'ajout des comptes email à la campagne');
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'ajout des comptes email à la campagne:', error);
+      if (error.response) {
+        console.error('📡 Détails de la réponse:', error.response.data);
+        console.error('📡 Status HTTP:', error.response.status);
+      }
+      throw new Error(`Impossible d'ajouter les comptes email à la campagne: ${error.message}`);
+    }
+  }
+
+  // Supprimer des comptes email d'une campagne
+  async removeEmailAccountsFromCampaign(campaignId, emailAccountIds) {
+    try {
+      console.log(`🗑️ Suppression de ${emailAccountIds.length} comptes email de la campagne ${campaignId}...`);
+      
+      // Utiliser l'endpoint DELETE selon la doc officielle
+      const response = await this.client.delete(`/campaigns/${campaignId}/email-accounts?api_key=${this.apiKey}`, {
+        data: {
+          email_account_ids: emailAccountIds
+        }
+      });
+      
+      if (response.data.ok) {
+        console.log(`✅ Comptes email supprimés avec succès de la campagne ${campaignId}`);
+        return {
+          success: true,
+          message: 'Comptes email supprimés avec succès de la campagne',
+          campaignId,
+          emailAccountIds
+        };
+      } else {
+        console.error(`❌ Réponse non-OK de l'API:`, response.data);
+        throw new Error('Échec de la suppression des comptes email de la campagne');
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de la suppression des comptes email de la campagne:', error);
+      if (error.response) {
+        console.error('📡 Détails de la réponse:', error.response.data);
+        console.error('📡 Status HTTP:', error.response.status);
+      }
+      throw new Error(`Impossible de supprimer les comptes email de la campagne: ${error.message}`);
+    }
+  }
+
+  // Récupérer tous les comptes email disponibles pour une campagne
+  async getAvailableEmailAccountsForCampaign(campaignId) {
+    try {
+      console.log(`🔍 Récupération des comptes email disponibles pour la campagne ${campaignId}...`);
+      
+      // Récupérer tous les comptes email de l'utilisateur
+      const allAccounts = await this.getAllEmailAccounts();
+      
+      // Récupérer les comptes email déjà assignés à cette campagne
+      const assignedAccounts = await this.getCampaignEmailAccounts(campaignId);
+      const assignedIds = assignedAccounts.map(account => account.id || account.email_account_id);
+      
+      // Filtrer pour ne garder que les comptes disponibles
+      const availableAccounts = allAccounts.filter(account => 
+        !assignedIds.includes(account.id)
+      );
+      
+      console.log(`✅ ${availableAccounts.length} comptes email disponibles pour la campagne ${campaignId}`);
+      console.log(`📊 Total: ${allAccounts.length} | Assignés: ${assignedAccounts.length} | Disponibles: ${availableAccounts.length}`);
+      
+      return {
+        available: availableAccounts,
+        assigned: assignedAccounts,
+        total: allAccounts.length,
+        summary: {
+          available: availableAccounts.length,
+          assigned: assignedAccounts.length,
+          total: allAccounts.length
+        }
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des comptes email disponibles:', error);
+      throw new Error(`Impossible de récupérer les comptes email disponibles: ${error.message}`);
+    }
+  }
 
   // Rechercher des campagnes
   async searchCampaigns(query) {
