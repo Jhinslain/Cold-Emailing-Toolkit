@@ -551,7 +551,17 @@ class WhoisService {
         if (!this.jobs[jobId]?.cancel) {
             const filteredResults = this._filterValidResults(results);
             this._generateWhoisCsv(outputCsvPath, filteredResults);
-            fs.unlinkSync(inputCsvPath);
+            
+            // Supprimer le fichier d'entrée seulement s'il existe
+            try {
+                if (fs.existsSync(inputCsvPath)) {
+                    fs.unlinkSync(inputCsvPath);
+                    console.log(`🗑️ Fichier d'entrée supprimé: ${inputCsvName}`);
+                }
+            } catch (unlinkError) {
+                console.warn(`⚠️ Impossible de supprimer le fichier d'entrée ${inputCsvName}:`, unlinkError.message);
+            }
+            
             await this.fileService.updateFileLineCount(outputCsvName);
             await this.fileService.removeFileFromRegistry(inputCsvName);
             sendLog('refresh', 'Actualisation de la liste des fichiers...');
@@ -600,7 +610,17 @@ class WhoisService {
             }
             const filteredResults = this._filterValidResults(results);
             this._generateWhoisCsv(outputCsvPath, filteredResults);
-            fs.unlinkSync(inputCsvPath);
+            
+            // Supprimer le fichier d'entrée seulement s'il existe
+            try {
+                if (fs.existsSync(inputCsvPath)) {
+                    fs.unlinkSync(inputCsvPath);
+                    console.log(`🗑️ Fichier d'entrée supprimé: ${inputCsvName}`);
+                }
+            } catch (unlinkError) {
+                console.warn(`⚠️ Impossible de supprimer le fichier d'entrée ${inputCsvName}:`, unlinkError.message);
+            }
+            
             await this.fileService.updateFileLineCount(outputCsvName);
             await this.fileService.removeFileFromRegistry(inputCsvName);
             await this.fileService.updateFileInfo(inputCsvName, { traitement: '' });

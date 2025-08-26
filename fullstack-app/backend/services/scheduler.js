@@ -41,7 +41,7 @@ class SchedulerService {
 
     // Téléchargement automatique du fichier de la veille + WHOIS + Million Verifier (tous les jours 6h)
     scheduleDailyYesterdayDownloadAndWhois() {
-        cron.schedule('0 6 * * *', async () => {
+        cron.schedule('0 12 * * *', async () => {
             console.log('🔄 Téléchargement automatique du fichier de la veille (J-1) à 6h00...');
             try {
                 await this.dailyService.downloadDailyFiles('yesterday');
@@ -51,6 +51,20 @@ class SchedulerService {
                 const yesterdayFile = await this.findYesterdayFile();
                 if (yesterdayFile) {
                     console.log(`🔍 Lancement du WHOIS sur le fichier: ${yesterdayFile}`);
+                    console.log(`📁 Vérification de l'existence du fichier d'entrée...`);
+                    
+                    // Vérifier que le fichier d'entrée existe avant de lancer le WHOIS
+                    const fs = require('fs');
+                    const inputFilePath = path.join(__dirname, '../data', yesterdayFile);
+                    if (!fs.existsSync(inputFilePath)) {
+                        console.error(`❌ Fichier d'entrée introuvable: ${inputFilePath}`);
+                        console.warn(`📋 Fichiers disponibles dans le dossier data:`);
+                        const files = fs.readdirSync(path.join(__dirname, '../data'));
+                        files.forEach(file => console.log(`   - ${file}`));
+                        return;
+                    }
+                    
+                    console.log(`✅ Fichier d'entrée trouvé: ${inputFilePath}`);
                     const whoisFileName = await this.whoisService.analyzeCsvFile(yesterdayFile);
                     console.log(`✅ WHOIS terminé pour: ${yesterdayFile}, fichier de sortie: ${whoisFileName}`);
 
@@ -63,7 +77,6 @@ class SchedulerService {
                         console.log(`📁 Chemin complet du fichier WHOIS: ${whoisFilePath}`);
                         
                         // Vérifier si le fichier WHOIS existe
-                        const fs = require('fs');
                         if (fs.existsSync(whoisFilePath)) {
                             // Vérifier la taille du fichier
                             const stats = fs.statSync(whoisFilePath);
@@ -71,6 +84,7 @@ class SchedulerService {
                             console.log(`📊 Taille du fichier WHOIS: ${fileSizeInMB} MB`);
                             
                             console.log(`✅ Fichier WHOIS trouvé, lancement du Million Verifier...`);
+                            console.log(`📁 Fichier d'entrée pour Million Verifier: ${whoisFileName}`);
                             const startTime = Date.now();
                             
                             await this.millionVerifierService.processCsvFile(whoisFilePath);
@@ -251,6 +265,20 @@ class SchedulerService {
                     const yesterdayFile = await this.findYesterdayFile();
                     if (yesterdayFile) {
                         console.log(`🔍 Lancement du WHOIS sur le fichier: ${yesterdayFile}`);
+                        console.log(`📁 Vérification de l'existence du fichier d'entrée...`);
+                        
+                        // Vérifier que le fichier d'entrée existe avant de lancer le WHOIS
+                        const fs = require('fs');
+                        const inputFilePath = path.join(__dirname, '../data', yesterdayFile);
+                        if (!fs.existsSync(inputFilePath)) {
+                            console.error(`❌ Fichier d'entrée introuvable: ${inputFilePath}`);
+                            console.warn(`📋 Fichiers disponibles dans le dossier data:`);
+                            const files = fs.readdirSync(path.join(__dirname, '../data'));
+                            files.forEach(file => console.log(`   - ${file}`));
+                            return;
+                        }
+                        
+                        console.log(`✅ Fichier d'entrée trouvé: ${inputFilePath}`);
                         const whoisFileName = await this.whoisService.analyzeCsvFile(yesterdayFile);
                         console.log(`✅ WHOIS terminé pour: ${yesterdayFile}, fichier de sortie: ${whoisFileName}`);
 
@@ -263,7 +291,6 @@ class SchedulerService {
                             console.log(`📁 Chemin complet du fichier WHOIS: ${whoisFilePath}`);
                             
                             // Vérifier si le fichier WHOIS existe
-                            const fs = require('fs');
                             if (fs.existsSync(whoisFilePath)) {
                                 // Vérifier la taille du fichier
                                 const stats = fs.statSync(whoisFilePath);
@@ -271,6 +298,7 @@ class SchedulerService {
                                 console.log(`📊 Taille du fichier WHOIS: ${fileSizeInMB} MB`);
                                 
                                 console.log(`✅ Fichier WHOIS trouvé, lancement du Million Verifier...`);
+                                console.log(`📁 Fichier d'entrée pour Million Verifier: ${whoisFileName}`);
                                 const startTime = Date.now();
                                 
                                 await this.millionVerifierService.processCsvFile(whoisFilePath);

@@ -22,8 +22,8 @@ function updateApiKeys() {
 }
 
 const MILLION_VERIFIER_URL = 'https://api.millionverifier.com/api/v3/';
-const BATCH_SIZE = 3;
-const DELAY_BETWEEN_BATCHES = 1000; // 1 seconde
+const BATCH_SIZE = 3; // Taille de base par clé API
+const DELAY_BETWEEN_BATCHES = 500; // Réduire le délai entre batches pour accélérer
 const REQUEST_TIMEOUT = 20000; // 20 secondes
 const API_TIMEOUT = 15; // Timeout de l'API MillionVerifier
 const MAX_RETRIES = 2;
@@ -84,17 +84,54 @@ async function updateFilesRegistry(outputFilePath, validRows, totalRows) {
 }
 
 /**
- * Vérifie un email via MillionVerifier avec retry et rotation des clés
- * @param {string} email Email à vérifier
- * @param {number} retryCount Nombre de tentatives
- * @returns {Promise<{email: string, result: any, error?: string}>}
+ * Vérifie une liste d'emails via MillionVerifier avec gestion des batches et délais
+ * @param {string[]} emails Liste des emails à vérifier
+ * @returns {Promise<Array<{email: string, result: any, error?: string}>>}
  */
-async function verifySingleEmail(email, retryCount = 0) {
-  if (API_KEYS.length === 0) {
-    throw new Error('Aucune clé API MillionVerifier configurée');
+async function verifyEmailsMillionVerifier(emails) {
+  console.log(`[SERVICE] Début de la vérification de ${emails.length} emails avec ${API_KEYS.length} clé(s) API`);
+  
+  if (emails.length === 0) {
+    return [];
   }
 
-  const apiKey = API_KEYS[retryCount % API_KEYS.length];
+  const results = [];
+  const batchSize = BATCH_SIZE * API_KEYS.length; // Augmenter la taille du batch pour utiliser toutes les clés
+  const delayBetweenBatches = DELAY_BETWEEN_BATCHES;
+
+  for (let i = 0; i < emails.length; i += batchSize) {
+    const batch = emails.slice(i, i + batchSize);
+    console.log(`[SERVICE] Traitement du batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(emails.length/batchSize)} (${batch.length} emails)`);
+    
+    // Distribuer les emails entre les différentes clés API pour traiter en parallèle
+    const batchPromises = batch.map((email, index) => {
+      const apiKeyIndex = index % API_KEYS.length;
+      const apiKey = API_KEYS[apiKeyIndex];
+      console.log(`[SERVICE] Email ${email} assigné à la clé API ${apiKeyIndex + 1} (${apiKey.substring(0, 8)}...)`);
+      return verifySingleEmailWithKey(email, apiKey);
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    // Attendre entre les batches pour éviter de surcharger l'API
+    if (i + batchSize < emails.length) {
+      console.log(`[SERVICE] Attente de ${delayBetweenBatches}ms avant le prochain batch...`);
+      await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+    }
+  }
+
+  console.log(`[SERVICE] Vérification terminée pour ${results.length} emails`);
+  return results;
+}
+
+/**
+ * Vérifie un email avec une clé API spécifique
+ * @param {string} email Email à vérifier
+ * @param {string} apiKey Clé API à utiliser
+ * @returns {Promise<{email: string, result: any, error?: string}>}
+ */
+async function verifySingleEmailWithKey(email, apiKey) {
   const url = `${MILLION_VERIFIER_URL}?api=${apiKey}&email=${encodeURIComponent(email)}&timeout=${API_TIMEOUT}`;
 
   try {
@@ -111,51 +148,23 @@ async function verifySingleEmail(email, retryCount = 0) {
     return { email, result };
   } catch (error) {
     console.warn(`[SERVICE] Erreur lors de la vérification de ${email}:`, error.message);
-    
-    // Retry avec une autre clé si possible
-    if (retryCount < Math.min(MAX_RETRIES, API_KEYS.length - 1) && error.response?.status !== 400) {
-      console.log(`[SERVICE] Retry avec une autre clé API pour ${email}`);
-      return verifySingleEmail(email, retryCount + 1);
-    }
-    
     return { email, error: error.message, result: null };
   }
 }
 
 /**
- * Vérifie une liste d'emails via MillionVerifier avec gestion des batches et délais
- * @param {string[]} emails Liste des emails à vérifier
- * @returns {Promise<Array<{email: string, result: any, error?: string}>>}
+ * Vérifie un email via MillionVerifier avec retry et rotation des clés
+ * @param {string} email Email à vérifier
+ * @param {number} retryCount Nombre de tentatives
+ * @returns {Promise<{email: string, result: any, error?: string}>}
  */
-async function verifyEmailsMillionVerifier(emails) {
-  console.log(`[SERVICE] Début de la vérification de ${emails.length} emails`);
-  
-  if (emails.length === 0) {
-    return [];
+async function verifySingleEmail(email, retryCount = 0) {
+  if (API_KEYS.length === 0) {
+    throw new Error('Aucune clé API MillionVerifier configurée');
   }
 
-  const results = [];
-  const batchSize = BATCH_SIZE;
-  const delayBetweenBatches = DELAY_BETWEEN_BATCHES;
-
-  for (let i = 0; i < emails.length; i += batchSize) {
-    const batch = emails.slice(i, i + batchSize);
-    console.log(`[SERVICE] Traitement du batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(emails.length/batchSize)} (${batch.length} emails)`);
-    
-    // Traiter le batch en parallèle
-    const batchPromises = batch.map(email => verifySingleEmail(email));
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
-    
-    // Attendre entre les batches pour éviter de surcharger l'API
-    if (i + batchSize < emails.length) {
-      console.log(`[SERVICE] Attente de ${delayBetweenBatches}ms avant le prochain batch...`);
-      await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
-    }
-  }
-
-  console.log(`[SERVICE] Vérification terminée pour ${results.length} emails`);
-  return results;
+  const apiKey = API_KEYS[retryCount % API_KEYS.length];
+  return verifySingleEmailWithKey(email, apiKey);
 }
 
 /**
@@ -309,6 +318,14 @@ async function processCsvFile(inputFilePath) {
     // Mettre à jour le fichier files-registry.json
     await updateFilesRegistry(outputFilePath, validRows.length, dataRows.length);
     
+    // Supprimer le fichier d'entrée après traitement réussi (remplacement)
+    try {
+      await fs.unlink(inputFilePath);
+      console.log(`[SERVICE] Fichier d'entrée supprimé: ${inputFilePath}`);
+    } catch (error) {
+      console.warn(`[SERVICE] Impossible de supprimer le fichier d'entrée ${inputFilePath}:`, error.message);
+    }
+    
     return {
       total: dataRows.length,
       valid: validCount,
@@ -366,6 +383,7 @@ async function processFile(inputFilePath) {
     console.log(`[SERVICE] Valides: ${result.valid} emails`);
     console.log(`[SERVICE] Invalides: ${result.invalid} emails`);
     console.log(`[SERVICE] Fichier de sortie créé: ${result.outputPath}`);
+    console.log(`[SERVICE] Fichier d'entrée supprimé (remplacement effectué)`);
     
     return result;
   } catch (error) {

@@ -1627,15 +1627,19 @@ function App() {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
               <div className="relative">
-                <GlobeAltIcon className="h-10 w-10 text-white floating-animation" />
-                <SparklesIcon className="h-4 w-4 text-yellow-300 absolute -top-1 -right-1 pulse-glow" />
+                <img 
+                  src="/domainAppLogo.png" 
+                  alt="Logo Domain App" 
+                  className="h-12 w-auto floating-animation"
+                  style={{ filter: 'brightness(0) invert(1)' }}
+                />
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-white">
-                  Traitement Domaines AFNIC
+                DomainScope
                 </h1>
                 <p className="text-glass-300 mt-1">
-                  Interface moderne pour le traitement des domaines .fr
+                  Interface moderne pour le traitement des domaines .fr et des campagnes SmartLeads
                 </p>
               </div>
             </div>
