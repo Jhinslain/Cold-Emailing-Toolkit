@@ -137,6 +137,17 @@ class FileService {
         return this.registryService.updateFileInfo(filename, fileInfo);
     }
 
+    // Mettre à jour les statistiques d'un fichier
+    updateFileStats(filename, statsUpdates) {
+        return this.registryService.updateFileStats(filename, statsUpdates);
+    }
+
+    // Obtenir les statistiques d'un fichier
+    getFileStats(filename) {
+        const fileInfo = this.registryService.getFileInfo(filename);
+        return fileInfo ? fileInfo.statistiques : null;
+    }
+
     // Supprimer un fichier du registre
     removeFileFromRegistry(filename) {
         return this.registryService.removeFile(filename);

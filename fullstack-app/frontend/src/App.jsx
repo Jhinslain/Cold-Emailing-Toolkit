@@ -25,7 +25,8 @@ import {
   PlayIcon,
   PauseIcon,
   StopIcon,
-  DocumentDuplicateIcon
+  DocumentDuplicateIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import { v4 as uuidv4 } from 'uuid';
 import Login from './Login.jsx';
@@ -91,10 +92,17 @@ function App() {
   const [whoisLoading, setWhoisLoading] = useState(false);
   const [whoisResult, setWhoisResult] = useState(null);
 
+  // États pour la modale des statistiques
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [selectedFileForStats, setSelectedFileForStats] = useState(null);
+
   // États pour MillionVerifier
   const [millionVerifierLoading, setMillionVerifierLoading] = useState(false);
   const [millionVerifierResults, setMillionVerifierResults] = useState(null);
   const [millionVerifierFile, setMillionVerifierFile] = useState(null);
+
+  // États pour le Scheduler
+  const [schedulerLoading, setSchedulerLoading] = useState(false);
 
   // États pour afficher plus de fichiers
   const [filesToShow, setFilesToShow] = useState(9);
@@ -873,6 +881,34 @@ function App() {
     } finally {
       setLoading(false);
       setSelectedAction(null);
+    }
+  };
+
+  // Fonction pour lancer le scheduler manuellement
+  const handleSchedulerLaunch = async () => {
+    setSchedulerLoading(true);
+    try {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/scheduler/execute-daily-process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        showMessage('success', 'Processus complet du scheduler lancé avec succès ! (Téléchargement + WHOIS + Million Verifier)');
+        // Rafraîchir les fichiers après un délai pour laisser le temps au traitement
+        setTimeout(() => {
+          fetchFiles();
+          fetchStats();
+        }, 10000); // Délai plus long car le processus est plus complet
+      } else {
+        showMessage('error', `Erreur: ${data.error}`);
+      }
+    } catch (error) {
+      showMessage('error', 'Erreur de connexion au serveur');
+    } finally {
+      setSchedulerLoading(false);
     }
   };
 
@@ -1752,6 +1788,23 @@ function App() {
           </button>
           
           <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`group relative px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 ${
+              activeTab === 'dashboard'
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-2xl shadow-blue-500/25'
+                : 'bg-glass-200 text-glass-300 hover:bg-glass-300 hover:text-white backdrop-blur-sm'
+            }`}
+          >
+            <div className="flex items-center space-x-3">
+              <ChartBarIcon className="h-6 w-6" />
+              <span>Dashboard</span>
+            </div>
+            {activeTab === 'dashboard' && (
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-white rounded-full"></div>
+            )}
+          </button>
+          
+          <button
             onClick={() => setActiveTab('campaigns')}
             className={`group relative px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 ${
               activeTab === 'campaigns'
@@ -1961,6 +2014,30 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* Troisième ligne : bouton Scheduler */}
+          <div className="flex flex-row gap-4 mt-6">
+            <button
+              onClick={handleSchedulerLaunch}
+              disabled={schedulerLoading}
+              className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {schedulerLoading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                  Lancement...
+                </>
+              ) : (
+                                  <>
+                    <ClockIcon className="h-6 w-6 mr-3" />
+                    Lancer le Processus Complet
+                  </>
+              )}
+            </button>
+          </div>
             </div>
 
   
@@ -2193,17 +2270,6 @@ function App() {
                   </button>
                 )}
                 
-                {/* Bouton Filtrer par localisation - seulement pour les fichiers WHOIS */}
-                {file.type === 'whois' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setProcessFile(file); setSelectedAction('location-filter'); }}
-                    className={`flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white ${getButtonColor(file, 'location-filter')}`}
-                  >
-                    <GlobeAltIcon className="h-3 w-3 mr-1" />
-                    Trier par loc
-                  </button>
-                )}
-                
                 {/* Bouton WHOIS - pour tous les fichiers sauf les fichiers WHOIS et Verifier */}
                 {file.type !== 'whois' && file.type !== 'verifier' && (
                   <button
@@ -2215,16 +2281,6 @@ function App() {
                   </button>
                 )}
 
-                {/* Bouton Messages personnalisés - seulement pour les fichiers WHOIS */}
-                {file.type === 'whois' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handlePersonalizedMessages(file); }}
-                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-purple-600 hover:bg-purple-700"
-                  >
-                    <ChatBubbleLeftRightIcon className="h-3 w-3 mr-1" />
-                    Messages
-                  </button>
-                )}
                 {/* Bouton MillionVerifier - pour tous les fichiers sauf les fichiers Verifier */}
                 {file.type !== 'verifier' && (
                   <button
@@ -2235,13 +2291,29 @@ function App() {
                     MillionVerifier
                   </button>
                 )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleExport(file); }}
-                  className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
-                >
-                  <DocumentArrowDownIcon className="h-3 w-3 mr-1" />
-                  Exporter
-                </button>
+
+                {/* Bouton Filtrer par localisation - pour les fichiers WHOIS et Verifier */}
+                {(file.type === 'whois' || file.type === 'verifier') && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setProcessFile(file); setSelectedAction('location-filter'); }}
+                    className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                  >
+                    <GlobeAltIcon className="h-3 w-3 mr-1" />
+                    Trier par loc
+                  </button>
+                )}
+
+                {/* Bouton Messages personnalisés - seulement pour les fichiers WHOIS */}
+                {/* {file.type === 'whois' && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handlePersonalizedMessages(file); }}
+                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-purple-600 hover:bg-purple-700"
+                  >
+                    <ChatBubbleLeftRightIcon className="h-3 w-3 mr-1" />
+                    Messages
+                  </button>
+                )} */}
+
                 <button
                   onClick={(e) => { e.stopPropagation(); handlePreview(file); }}
                   className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
@@ -2249,6 +2321,23 @@ function App() {
                   <EyeIcon className="h-3 w-3 mr-1" />
                   Aperçu
                 </button>
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSelectedFileForStats(file); setShowStatsModal(true); }}
+                  className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                >
+                  <ChartBarIcon className="h-3 w-3 mr-1" />
+                  Statistiques
+                </button>
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleExport(file); }}
+                  className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                >
+                  <DocumentArrowDownIcon className="h-3 w-3 mr-1" />
+                  Exporter
+                </button>
+
                 <button
                   onClick={(e) => { e.stopPropagation(); openDeleteModal(file); }}
                   className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200"
@@ -2375,6 +2464,269 @@ function App() {
             );
           })()
         )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Onglet Dashboard */}
+      {activeTab === 'dashboard' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 mb-12">
+          <div className="glass-card p-8 rounded-2xl">
+            <h2 className="text-2xl font-bold text-white mb-8 flex items-center">
+              <ChartBarIcon className="h-6 w-6 mr-3 text-blue-300" />
+              Dashboard des Statistiques
+            </h2>
+
+            {/* Statistiques des fichiers */}
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+                <FolderIcon className="h-5 w-5 mr-2 text-green-300" />
+                Statistiques des Fichiers
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Total des fichiers */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6 hover:border-neutral-500 transition-all duration-300">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-neutral-700 rounded-xl shadow-lg">
+                      <FolderIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-neutral-300">Total des fichiers</p>
+                      <p className="text-3xl font-bold text-white">{files.length}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fichiers par type */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6 hover:border-neutral-500 transition-all duration-300">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-neutral-700 rounded-xl shadow-lg">
+                      <DocumentTextIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-neutral-300">Fichiers WHOIS</p>
+                      <p className="text-3xl font-bold text-white">
+                        {files.filter(f => f.type === 'whois').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fichiers verifier */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6 hover:border-neutral-500 transition-all duration-300">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-neutral-700 rounded-xl shadow-lg">
+                      <SparklesIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-neutral-300">Fichiers Verifier</p>
+                      <p className="text-3xl font-bold text-white">
+                        {files.filter(f => f.type === 'verifier').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fichiers classiques */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6 hover:border-neutral-500 transition-all duration-300">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-neutral-700 rounded-xl shadow-lg">
+                      <DocumentTextIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-neutral-300">Fichiers Classiques</p>
+                      <p className="text-3xl font-bold text-white">
+                        {files.filter(f => f.type === 'classique').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Statistiques des campagnes */}
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+                <UserGroupIcon className="h-5 w-5 mr-2 text-blue-300" />
+                Statistiques des Campagnes
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Total des campagnes */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6 hover:border-neutral-500 transition-all duration-300">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-neutral-700 rounded-xl shadow-lg">
+                      <UserGroupIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-neutral-300">Total des campagnes</p>
+                      <p className="text-3xl font-bold text-white">{campaigns.length}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Campagnes actives */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6 hover:border-neutral-500 transition-all duration-300">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-neutral-700 rounded-xl shadow-lg">
+                      <PlayIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-neutral-300">Campagnes actives</p>
+                      <p className="text-3xl font-bold text-white">
+                        {campaigns.filter(c => c.status === 'ACTIVE').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Campagnes en pause */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6 hover:border-neutral-500 transition-all duration-300">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-neutral-700 rounded-xl shadow-lg">
+                      <PauseIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-neutral-300">Campagnes en pause</p>
+                      <p className="text-3xl font-bold text-white">
+                        {campaigns.filter(c => c.status === 'PAUSED').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Campagnes arrêtées */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6 hover:border-neutral-500 transition-all duration-300">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-neutral-700 rounded-xl shadow-lg">
+                      <StopIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-neutral-300">Campagnes arrêtées</p>
+                      <p className="text-3xl font-bold text-white">
+                        {campaigns.filter(c => c.status === 'STOPPED').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Statistiques détaillées des fichiers */}
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+                <ChartBarIcon className="h-5 w-5 mr-2 text-purple-300" />
+                Statistiques Détaillées des Fichiers
+              </h3>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Totaux des lignes */}
+                <div className="bg-neutral-700/50 rounded-xl p-6 border border-neutral-600">
+                  <h4 className="text-lg font-semibold text-white mb-4">Nombre de Lignes Total</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-300">Domaines :</span>
+                      <span className="text-white font-semibold">
+                        {files.reduce((sum, f) => sum + (f.statistiques?.domain_lignes || 0), 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-300">WHOIS :</span>
+                      <span className="text-white font-semibold">
+                        {files.reduce((sum, f) => sum + (f.statistiques?.whois_lignes || 0), 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-300">Vérifier :</span>
+                      <span className="text-white font-semibold">
+                        {files.reduce((sum, f) => sum + (f.statistiques?.verifier_lignes || 0), 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Moyennes des lignes */}
+                <div className="bg-neutral-700/50 rounded-xl p-6 border border-neutral-600">
+                  <h4 className="text-lg font-semibold text-white mb-4">Moyennes</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-300">Lignes domaines moyennes :</span>
+                      <span className="text-white font-semibold">
+                        {(() => {
+                          const totalDomainLines = files.reduce((sum, f) => sum + (f.statistiques?.domain_lignes || 0), 0);
+                          const filesWithDomainLines = files.filter(f => f.statistiques?.domain_lignes > 0).length;
+                          return filesWithDomainLines > 0 ? Math.round(totalDomainLines / filesWithDomainLines).toLocaleString() : '0';
+                        })()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-300">Lignes WHOIS moyennes :</span>
+                      <span className="text-white font-semibold">
+                        {(() => {
+                          const totalWhoisLines = files.reduce((sum, f) => sum + (f.statistiques?.whois_lignes || 0), 0);
+                          const filesWithWhoisLines = files.filter(f => f.statistiques?.whois_lignes > 0).length;
+                          return filesWithWhoisLines > 0 ? Math.round(totalWhoisLines / filesWithWhoisLines).toLocaleString() : '0';
+                        })()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-300">Lignes vérifier moyennes :</span>
+                      <span className="text-white font-semibold">
+                        {(() => {
+                          const totalVerifierLines = files.reduce((sum, f) => sum + (f.statistiques?.verifier_lignes || 0), 0);
+                          const filesWithVerifierLines = files.filter(f => f.statistiques?.verifier_lignes > 0).length;
+                          return filesWithVerifierLines > 0 ? Math.round(totalVerifierLines / filesWithVerifierLines).toLocaleString() : '0';
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Graphique des performances */}
+            <div>
+              <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+                <ArrowPathIcon className="h-5 w-5 mr-2 text-green-300" />
+                Performance des Services
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Performance WHOIS */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6">
+                  <h4 className="text-lg font-semibold text-white mb-4 text-center">Service WHOIS</h4>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-white mb-2">
+                      {files.filter(f => f.type === 'whois' && f.statistiques?.whois_lignes > 0).length}
+                    </div>
+                    <div className="text-sm text-neutral-300">Fichiers traités</div>
+                  </div>
+                </div>
+
+                {/* Performance MillionVerifier */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6">
+                  <h4 className="text-lg font-semibold text-white mb-4 text-center">Service MillionVerifier</h4>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-white mb-2">
+                      {files.filter(f => f.type === 'verifier' && f.statistiques?.verifier_lignes > 0).length}
+                    </div>
+                    <div className="text-sm text-neutral-300">Fichiers traités</div>
+                  </div>
+                </div>
+
+                {/* Performance générale */}
+                <div className="bg-neutral-800/80 backdrop-blur-sm border border-neutral-600 rounded-xl p-6">
+                  <h4 className="text-lg font-semibold text-white mb-4 text-center">Performance Générale</h4>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-white mb-2">
+                      {Math.round((files.filter(f => f.statistiques && (f.statistiques.whois_lignes > 0 || f.statistiques.verifier_lignes > 0)).length / Math.max(files.length, 1)) * 100)}%
+                    </div>
+                    <div className="text-sm text-neutral-300">Taux de traitement</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -3304,6 +3656,140 @@ function App() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale des statistiques */}
+      {showStatsModal && selectedFileForStats && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-neutral-800 border border-neutral-600 rounded-2xl p-8 max-w-2xl w-full mx-4 animate-slide-up shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">
+                📊 Statistiques du fichier
+              </h3>
+              <button
+                onClick={() => { setShowStatsModal(false); setSelectedFileForStats(null); }}
+                className="text-neutral-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                📁 {selectedFileForStats.name}
+              </h4>
+              <div className="text-sm text-neutral-400">
+                Type: <span className="text-blue-300">{getFileTypeName(selectedFileForStats)}</span> | 
+                Taille: <span className="text-green-300">{formatFileSize(selectedFileForStats.size)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {/* Section Domaines */}
+              <div className="bg-neutral-700/50 rounded-lg p-4 border-2 border-green-500">
+                <h5 className="text-md font-semibold text-white mb-3">
+                  Téléchargement des domaines
+                </h5>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedFileForStats.statistiques?.domain_lignes || 0}
+                    </div>
+                    <div className="text-sm text-neutral-400">Lignes téléchargées</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedFileForStats.statistiques?.domain_temps || 0}s
+                    </div>
+                    <div className="text-sm text-neutral-400">Temps de téléchargement</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section WHOIS */}
+              <div className="bg-neutral-700/50 rounded-lg p-4 border-2 border-purple-500">
+                <h5 className="text-md font-semibold text-white mb-3">
+                  Traitement WHOIS
+                </h5>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedFileForStats.statistiques?.whois_lignes || 0}
+                    </div>
+                    <div className="text-sm text-neutral-400">Lignes traitées</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedFileForStats.statistiques?.whois_temps || 0}s
+                    </div>
+                    <div className="text-sm text-neutral-400">Temps de traitement</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section MillionVerifier */}
+              <div className="bg-neutral-700/50 rounded-lg p-4 border-2 border-yellow-500">
+                <h5 className="text-md font-semibold text-white mb-3">
+                  Traitement MillionVerifier
+                </h5>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedFileForStats.statistiques?.verifier_lignes || 0}
+                    </div>
+                    <div className="text-sm text-neutral-400">Lignes traitées</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedFileForStats.statistiques?.verifier_temps || 0}s
+                    </div>
+                    <div className="text-sm text-neutral-400">Temps de traitement</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Résumé des performances */}
+              <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg p-4 border border-blue-500/30">
+                <h5 className="text-md font-semibold text-white mb-3">
+                  📈 Résumé des performances
+                </h5>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-neutral-400">Total des lignes traitées :</span>
+                    <div className="text-lg font-bold text-white">
+                      {Math.max(
+                        selectedFileForStats.statistiques?.domain_lignes || 0,
+                        selectedFileForStats.statistiques?.whois_lignes || 0,
+                        selectedFileForStats.statistiques?.verifier_lignes || 0
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-neutral-400">Temps total :</span>
+                    <div className="text-lg font-bold text-white">
+                      {(
+                        (selectedFileForStats.statistiques?.domain_temps || 0) +
+                        (selectedFileForStats.statistiques?.whois_temps || 0) +
+                        (selectedFileForStats.statistiques?.verifier_temps || 0)
+                      )}s
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => { setShowStatsModal(false); setSelectedFileForStats(null); }}
+                className="px-6 py-2 bg-neutral-600 hover:bg-neutral-700 text-white font-medium rounded-lg transition-all duration-200"
+              >
+                Fermer
+              </button>
             </div>
           </div>
         </div>

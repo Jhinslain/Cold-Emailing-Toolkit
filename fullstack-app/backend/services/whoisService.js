@@ -480,6 +480,14 @@ class WhoisService {
         const baseName = inputCsvName.replace(/\.csv$/i, '');
         const outputCsvName = baseName + '_whois.csv';
         const outputCsvPath = path.join(this.dataDir, outputCsvName);
+        
+        // Mettre à jour les statistiques du fichier d'entrée
+        const startTime = Date.now();
+        await this.fileService.updateFileStats(inputCsvName, {
+            whois_lignes: domains.length,
+            whois_temps: 0 // Sera mis à jour à la fin
+        });
+        
         const stats = {
             total: domains.length,
             processed: 0,
@@ -487,7 +495,7 @@ class WhoisService {
             phonesFound: 0,
             contactsFound: 0,
             errors: 0,
-            startTime: Date.now()
+            startTime: startTime
         };
         const displayStats = () => {
             const elapsed = Math.floor((Date.now() - stats.startTime) / 1000);
@@ -551,6 +559,12 @@ class WhoisService {
         if (!this.jobs[jobId]?.cancel) {
             const filteredResults = this._filterValidResults(results);
             this._generateWhoisCsv(outputCsvPath, filteredResults);
+            
+            // Mettre à jour les statistiques finales du fichier d'entrée
+            const totalTime = Math.floor((Date.now() - startTime) / 1000);
+            await this.fileService.updateFileStats(inputCsvName, {
+                whois_temps: totalTime
+            });
             
             // Supprimer le fichier d'entrée seulement s'il existe
             try {

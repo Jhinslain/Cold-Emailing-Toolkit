@@ -11,6 +11,10 @@ let API_KEYS = [
   process.env.API_MILLION_VERIFIER3
 ].filter(key => key); // Filtrer les clés vides
 
+// Mécanisme de verrouillage pour éviter les appels multiples
+let isProcessing = false;
+let currentProcessingFile = null;
+
 // Fonction pour mettre à jour les clés API
 function updateApiKeys() {
   API_KEYS = [
@@ -29,12 +33,69 @@ const API_TIMEOUT = 15; // Timeout de l'API MillionVerifier
 const MAX_RETRIES = 2;
 
 /**
+ * Met à jour le registre du fichier d'entrée pour indiquer son statut de traitement
+ * @param {string} inputFileName Nom du fichier d'entrée
+ * @param {number} processingTime Temps de traitement en secondes
+ * @param {string} traitement Type de traitement ("verifier" pour MillionVerifier)
+ */
+async function updateInputFileRegistry(inputFileName, processingTime = 0, traitement = "verifier") {
+  try {
+    const registryPath = path.join(__dirname, '../data/files-registry.json');
+    
+    // Lire le fichier registry existant
+    let registry = {};
+    try {
+      const registryContent = await fs.readFile(registryPath, 'utf-8');
+      registry = JSON.parse(registryContent);
+    } catch (error) {
+      console.warn('[SERVICE] Fichier registry non trouvé, création d\'un nouveau');
+    }
+    
+    // Mettre à jour l'entrée du fichier d'entrée
+    if (registry[inputFileName]) {
+      // Préserver toutes les données existantes et ajouter seulement le nouveau traitement
+      registry[inputFileName] = {
+        ...registry[inputFileName], // Garder toutes les données existantes
+        traitement: traitement,     // Mettre à jour le traitement
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Mettre à jour les statistiques verifier en préservant les autres
+      if (!registry[inputFileName].statistiques) {
+        registry[inputFileName].statistiques = {
+          domain_lignes: 0,
+          domain_temps: 0,
+          whois_lignes: 0,
+          whois_temps: 0,
+          verifier_lignes: 0,
+          verifier_temps: 0
+        };
+      } else {
+        // Préserver les statistiques existantes et mettre à jour seulement verifier
+        registry[inputFileName].statistiques = {
+          ...registry[inputFileName].statistiques, // Garder toutes les stats existantes
+          verifier_temps: processingTime > 0 ? processingTime : registry[inputFileName].statistiques.verifier_temps
+        };
+      }
+    }
+    
+    // Écrire le fichier registry mis à jour
+    await fs.writeFile(registryPath, JSON.stringify(registry, null, 2), 'utf-8');
+    console.log(`[SERVICE] Registry mis à jour pour ${inputFileName}: traitement = ${traitement}`);
+    
+  } catch (error) {
+    console.error('[SERVICE] Erreur lors de la mise à jour du registry du fichier d\'entrée:', error.message);
+  }
+}
+
+/**
  * Met à jour le fichier files-registry.json avec les informations du fichier de sortie
  * @param {string} outputFilePath Chemin vers le fichier de sortie
  * @param {number} validRows Nombre de lignes valides écrites
  * @param {number} totalRows Nombre total de lignes traitées
+ * @param {number} processingTime Temps de traitement en secondes
  */
-async function updateFilesRegistry(outputFilePath, validRows, totalRows) {
+async function updateFilesRegistry(outputFilePath, validRows, totalRows, processingTime = 0) {
   try {
     const registryPath = path.join(__dirname, '../data/files-registry.json');
     
@@ -60,23 +121,54 @@ async function updateFilesRegistry(outputFilePath, validRows, totalRows) {
     }
     
     // Mettre à jour ou créer l'entrée pour ce fichier
-    registry[fileName] = {
-      size: fileSize,
-      modified: new Date().toISOString(),
-      type: "verifier",
-      totalLines: validRows,
-      lastUpdated: new Date().toISOString(),
-      dates: [],
-      localisations: [],
-      mergedFrom: [],
-      totalRows: totalRows,
-      validRows: validRows,
-      invalidRows: totalRows - validRows
-    };
+    if (registry[fileName]) {
+      // Préserver les données existantes et mettre à jour seulement les champs nécessaires
+      registry[fileName] = {
+        ...registry[fileName], // Garder toutes les données existantes
+        size: fileSize,
+        modified: new Date().toISOString(),
+        type: "verifier",
+        totalLines: validRows,
+        lastUpdated: new Date().toISOString(),
+        totalRows: totalRows,
+        validRows: validRows,
+        invalidRows: totalRows - validRows,
+        traitement: "verifier", // Indiquer que le fichier a été traité par MillionVerifier
+        statistiques: {
+          ...registry[fileName].statistiques, // Préserver les stats existantes
+          verifier_lignes: validRows,
+          verifier_temps: processingTime
+        }
+      };
+    } else {
+      // Créer une nouvelle entrée
+      registry[fileName] = {
+        size: fileSize,
+        modified: new Date().toISOString(),
+        type: "verifier",
+        totalLines: validRows,
+        lastUpdated: new Date().toISOString(),
+        dates: [],
+        localisations: [],
+        mergedFrom: [],
+        totalRows: totalRows,
+        validRows: validRows,
+        invalidRows: totalRows - validRows,
+        traitement: "verifier", // Indiquer que le fichier a été traité par MillionVerifier
+        statistiques: {
+          domain_lignes: 0,
+          domain_temps: 0,
+          whois_lignes: 0,
+          whois_temps: 0,
+          verifier_lignes: validRows,
+          verifier_temps: processingTime
+        }
+      };
+    }
     
     // Écrire le fichier registry mis à jour
     await fs.writeFile(registryPath, JSON.stringify(registry, null, 2), 'utf-8');
-    console.log(`[SERVICE] Registry mis à jour pour ${fileName}: ${validRows} lignes valides sur ${totalRows} total, taille: ${fileSize} octets`);
+    console.log(`[SERVICE] Registry mis à jour pour ${fileName}: ${validRows} lignes valides sur ${totalRows} total, taille: ${fileSize} octets, temps: ${processingTime}s`);
     
   } catch (error) {
     console.error('[SERVICE] Erreur lors de la mise à jour du registry:', error.message);
@@ -92,16 +184,34 @@ async function verifyEmailsMillionVerifier(emails) {
   console.log(`[SERVICE] Début de la vérification de ${emails.length} emails avec ${API_KEYS.length} clé(s) API`);
   
   if (emails.length === 0) {
+    console.log(`[SERVICE] Aucun email à traiter, arrêt de la vérification`);
     return [];
   }
 
   const results = [];
-  const batchSize = BATCH_SIZE * API_KEYS.length; // Augmenter la taille du batch pour utiliser toutes les clés
+  const batchSize = Math.max(1, BATCH_SIZE * API_KEYS.length); // Éviter batchSize = 0
   const delayBetweenBatches = DELAY_BETWEEN_BATCHES;
+  
+  console.log(`[SERVICE] Configuration: batchSize=${batchSize}, totalEmails=${emails.length}, totalBatches=${Math.ceil(emails.length/batchSize)}`);
+
+  // Protection contre les emails vides
+  if (emails.length === 0 || batchSize === 0) {
+    console.warn(`[SERVICE] ⚠️ Configuration invalide: emails=${emails.length}, batchSize=${batchSize}`);
+    return [];
+  }
 
   for (let i = 0; i < emails.length; i += batchSize) {
     const batch = emails.slice(i, i + batchSize);
-    console.log(`[SERVICE] Traitement du batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(emails.length/batchSize)} (${batch.length} emails)`);
+    const currentBatch = Math.floor(i/batchSize) + 1;
+    const totalBatches = Math.ceil(emails.length/batchSize);
+    
+    console.log(`[SERVICE] Traitement du batch ${currentBatch}/${totalBatches} (${batch.length} emails)`);
+    
+    // Vérifier que le batch n'est pas vide
+    if (batch.length === 0) {
+      console.warn(`[SERVICE] Batch vide détecté, arrêt de la boucle`);
+      break; // Arrêter la boucle au lieu de continuer
+    }
     
     // Distribuer les emails entre les différentes clés API pour traiter en parallèle
     const batchPromises = batch.map((email, index) => {
@@ -173,15 +283,38 @@ async function verifySingleEmail(email, retryCount = 0) {
  * @returns {Promise<{total: number, valid: number, invalid: number, outputPath: string}>}
  */
 async function processCsvFile(inputFilePath) {
-  console.log(`[SERVICE] Début du traitement du fichier: ${inputFilePath}`);
+  console.log(`[SERVICE] 🔍 APPEL processCsvFile - Fichier: ${inputFilePath}`);
+  console.log(`[SERVICE] 📍 Stack trace:`, new Error().stack.split('\n').slice(1, 4).join('\n'));
+  
+  // Vérifier si un traitement est déjà en cours
+  if (isProcessing) {
+    console.warn(`[SERVICE] ⚠️ Un traitement est déjà en cours pour: ${currentProcessingFile}`);
+    console.warn(`[SERVICE] Fichier demandé: ${inputFilePath}`);
+    throw new Error('Un traitement est déjà en cours');
+  }
+  
+  // Vérifier si le même fichier est déjà en cours de traitement
+  if (currentProcessingFile === inputFilePath) {
+    console.warn(`[SERVICE] ⚠️ Le fichier ${inputFilePath} est déjà en cours de traitement`);
+    throw new Error('Fichier déjà en cours de traitement');
+  }
   
   try {
+    // Marquer le début du traitement
+    isProcessing = true;
+    currentProcessingFile = inputFilePath;
+    const startTime = Date.now();
+    console.log(`[SERVICE] 🔒 Verrou de traitement activé pour: ${inputFilePath}`);
+    
     // Vérifier que le fichier existe
     await fs.access(inputFilePath);
     
+    // Mettre à jour le registre du fichier d'entrée pour indiquer qu'il est en cours de traitement par MillionVerifier
+    const inputFileName = path.basename(inputFilePath, path.extname(inputFilePath));
+    await updateInputFileRegistry(inputFileName + path.extname(inputFilePath), 0, "verifier");
+    
     // Générer le nom du fichier de sortie avec suffixe _verifier
     const inputDir = path.dirname(inputFilePath);
-    const inputFileName = path.basename(inputFilePath, path.extname(inputFilePath));
     const outputFilePath = path.join(inputDir, `${inputFileName}_verifier.csv`);
     
     console.log(`[SERVICE] Fichier de sortie: ${outputFilePath}`);
@@ -315,8 +448,12 @@ async function processCsvFile(inputFilePath) {
       console.log(`[SERVICE] Fichier de sortie vide créé avec l'en-tête: ${outputFilePath}`);
     }
     
-    // Mettre à jour le fichier files-registry.json
-    await updateFilesRegistry(outputFilePath, validRows.length, dataRows.length);
+    // Mettre à jour le fichier files-registry.json avec les statistiques
+    const totalTime = Math.floor((Date.now() - startTime) / 1000);
+    await updateFilesRegistry(outputFilePath, validRows.length, dataRows.length, totalTime);
+    
+    // Mettre à jour le registre du fichier d'entrée pour indiquer qu'il a été traité par MillionVerifier
+    await updateInputFileRegistry(inputFileName, totalTime, "verifier");
     
     // Supprimer le fichier d'entrée après traitement réussi (remplacement)
     try {
@@ -326,18 +463,23 @@ async function processCsvFile(inputFilePath) {
       console.warn(`[SERVICE] Impossible de supprimer le fichier d'entrée ${inputFilePath}:`, error.message);
     }
     
-    return {
-      total: dataRows.length,
-      valid: validCount,
-      invalid: invalidCount,
-      outputPath: outputFilePath
-    };
-    
-  } catch (error) {
-    console.error(`[SERVICE] Erreur lors du traitement du fichier:`, error);
-    throw error;
-  }
-}
+         return {
+       total: dataRows.length,
+       valid: validCount,
+       invalid: invalidCount,
+       outputPath: outputFilePath
+     };
+     
+   } catch (error) {
+     console.error(`[SERVICE] Erreur lors du traitement du fichier:`, error);
+     throw error;
+   } finally {
+     // Libérer le verrou de traitement
+     isProcessing = false;
+     currentProcessingFile = null;
+     console.log(`[SERVICE] 🔓 Verrou de traitement libéré pour: ${inputFilePath}`);
+   }
+ }
 
 /**
  * Parse une ligne CSV en tenant compte des virgules dans les champs
@@ -420,5 +562,6 @@ module.exports = {
   verifySingleEmail,
   initializeService,
   updateApiKeys,
-  updateFilesRegistry
+  updateFilesRegistry,
+  updateInputFileRegistry
 }; 

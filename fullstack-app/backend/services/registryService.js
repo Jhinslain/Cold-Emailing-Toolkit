@@ -50,7 +50,15 @@ class RegistryService {
             lastUpdated: new Date().toISOString(),
             dates: options.dates || [],
             localisations: options.localisations || [],
-            mergedFrom: options.mergedFrom || []
+            mergedFrom: options.mergedFrom || [],
+            statistiques: options.statistiques || {
+                domain_lignes: 0,
+                domain_temps: 0,
+                whois_lignes: 0,
+                whois_temps: 0,
+                verifier_lignes: 0,
+                verifier_temps: 0
+            }
         };
     }
 
@@ -125,7 +133,7 @@ class RegistryService {
     }
 
     // Ajouter un fichier téléchargé (Opendata AFNIC)
-    addDownloadedFile(filename, isOpendata = false) {
+    addDownloadedFile(filename, isOpendata = false, totalLines = 0, downloadTime = 0) {
         const registry = this.loadRegistry();
         
         const dates = isOpendata ? ["all"] : this.extractDatesFromFilename(filename);
@@ -133,7 +141,15 @@ class RegistryService {
         
         registry[filename] = this.createFileEntry(filename, {
             type,
-            dates
+            dates,
+            statistiques: {
+                domain_lignes: totalLines,
+                domain_temps: downloadTime,
+                whois_lignes: 0,
+                whois_temps: 0,
+                verifier_lignes: 0,
+                verifier_temps: 0
+            }
         });
         
         return this.saveRegistry(registry);
@@ -248,6 +264,48 @@ class RegistryService {
             };
         } else {
             registry[filename] = this.createFileEntry(filename, updates);
+        }
+        
+        return this.saveRegistry(registry);
+    }
+
+    // Mettre à jour les statistiques d'un fichier
+    updateFileStats(filename, statsUpdates) {
+        const registry = this.loadRegistry();
+        
+        if (registry[filename]) {
+            // Initialiser la section statistiques si elle n'existe pas
+            if (!registry[filename].statistiques) {
+                registry[filename].statistiques = {
+                    domain_lignes: 0,
+                    domain_temps: 0,
+                    whois_lignes: 0,
+                    whois_temps: 0,
+                    verifier_lignes: 0,
+                    verifier_temps: 0
+                };
+            }
+            
+            // Mettre à jour les statistiques
+            registry[filename].statistiques = {
+                ...registry[filename].statistiques,
+                ...statsUpdates
+            };
+            
+            registry[filename].lastUpdated = new Date().toISOString();
+        } else {
+            // Créer une nouvelle entrée si le fichier n'existe pas
+            registry[filename] = this.createFileEntry(filename, {
+                statistiques: {
+                    domain_lignes: 0,
+                    domain_temps: 0,
+                    whois_lignes: 0,
+                    whois_temps: 0,
+                    verifier_lignes: 0,
+                    verifier_temps: 0,
+                    ...statsUpdates
+                }
+            });
         }
         
         return this.saveRegistry(registry);

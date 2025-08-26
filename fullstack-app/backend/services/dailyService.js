@@ -94,6 +94,7 @@ class DailyService {
 
     // Télécharger un fichier quotidien spécifique et le convertir en CSV (une colonne)
     async downloadDailyFile(date) {
+        const startTime = Date.now(); // Ajouter le temps de début pour mesurer la durée
         const txtFileName = `${date}_CREA_fr.txt`;
         const csvFileName = `${date}_domains.csv`;
         const txtFilePath = path.join(this.dataDir, txtFileName);
@@ -103,6 +104,20 @@ class DailyService {
         if (fs.existsSync(csvFilePath)) {
             // Mettre à jour le nombre de lignes même si le fichier existe déjà
             await this.fileService.updateFileLineCount(csvFileName);
+            
+            // Mettre à jour les statistiques si elles n'existent pas
+            const fileStats = await this.fileService.getFileStats(csvFileName);
+            if (!fileStats || !fileStats.domain_lignes) {
+                // Compter les lignes du fichier existant
+                const content = fs.readFileSync(csvFilePath, 'utf8');
+                const lines = content.split('\n').length - 1; // -1 pour l'en-tête
+                
+                await this.fileService.updateFileStats(csvFileName, {
+                    domain_lignes: lines,
+                    domain_temps: 0 // Temps inconnu pour les fichiers existants
+                });
+            }
+            
             console.log(`✅ Fichier CSV déjà présent: ${csvFileName}`);
             return {
                 date,
@@ -143,8 +158,17 @@ class DailyService {
                 // Supprimer le fichier TXT après conversion réussie
                 fs.unlinkSync(txtFilePath);
                 console.log(`🗑️ Fichier TXT supprimé: ${txtFileName}`);
+                
                 // Mettre à jour le nombre de lignes dans le registre
                 await this.fileService.updateFileLineCount(csvFileName);
+                
+                // Mettre à jour les statistiques avec le nombre de lignes et le temps de téléchargement
+                const downloadTime = Math.floor((Date.now() - startTime) / 1000);
+                await this.fileService.updateFileStats(csvFileName, {
+                    domain_lignes: conversionResult.lines,
+                    domain_temps: downloadTime
+                });
+                
                 return {
                     date,
                     success: true,

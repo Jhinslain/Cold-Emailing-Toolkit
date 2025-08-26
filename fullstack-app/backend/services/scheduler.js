@@ -41,80 +41,87 @@ class SchedulerService {
 
     // Téléchargement automatique du fichier de la veille + WHOIS + Million Verifier (tous les jours 6h)
     scheduleDailyYesterdayDownloadAndWhois() {
-        cron.schedule('0 12 * * *', async () => {
-            console.log('🔄 Téléchargement automatique du fichier de la veille (J-1) à 6h00...');
-            try {
-                await this.dailyService.downloadDailyFiles('yesterday');
-                console.log('✅ Fichier de la veille téléchargé avec succès');
-
-                // Trouver le fichier de la veille
-                const yesterdayFile = await this.findYesterdayFile();
-                if (yesterdayFile) {
-                    console.log(`🔍 Lancement du WHOIS sur le fichier: ${yesterdayFile}`);
-                    console.log(`📁 Vérification de l'existence du fichier d'entrée...`);
-                    
-                    // Vérifier que le fichier d'entrée existe avant de lancer le WHOIS
-                    const fs = require('fs');
-                    const inputFilePath = path.join(__dirname, '../data', yesterdayFile);
-                    if (!fs.existsSync(inputFilePath)) {
-                        console.error(`❌ Fichier d'entrée introuvable: ${inputFilePath}`);
-                        console.warn(`📋 Fichiers disponibles dans le dossier data:`);
-                        const files = fs.readdirSync(path.join(__dirname, '../data'));
-                        files.forEach(file => console.log(`   - ${file}`));
-                        return;
-                    }
-                    
-                    console.log(`✅ Fichier d'entrée trouvé: ${inputFilePath}`);
-                    const whoisFileName = await this.whoisService.analyzeCsvFile(yesterdayFile);
-                    console.log(`✅ WHOIS terminé pour: ${yesterdayFile}, fichier de sortie: ${whoisFileName}`);
-
-                    // Lancer le Million Verifier après le WHOIS
-                    console.log(`🔍 Lancement du Million Verifier sur le fichier WHOIS: ${whoisFileName}`);
-                    console.log(`⏰ Heure de lancement: ${new Date().toISOString()}`);
-                    
-                    try {
-                        const whoisFilePath = path.join(__dirname, '../data', whoisFileName);
-                        console.log(`📁 Chemin complet du fichier WHOIS: ${whoisFilePath}`);
-                        
-                        // Vérifier si le fichier WHOIS existe
-                        if (fs.existsSync(whoisFilePath)) {
-                            // Vérifier la taille du fichier
-                            const stats = fs.statSync(whoisFilePath);
-                            const fileSizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
-                            console.log(`📊 Taille du fichier WHOIS: ${fileSizeInMB} MB`);
-                            
-                            console.log(`✅ Fichier WHOIS trouvé, lancement du Million Verifier...`);
-                            console.log(`📁 Fichier d'entrée pour Million Verifier: ${whoisFileName}`);
-                            const startTime = Date.now();
-                            
-                            await this.millionVerifierService.processCsvFile(whoisFilePath);
-                            
-                            const endTime = Date.now();
-                            const duration = Math.round((endTime - startTime) / 1000);
-                            console.log(`✅ Million Verifier terminé en ${duration}s pour: ${whoisFileName}`);
-                            console.log(`⏰ Heure de fin: ${new Date().toISOString()}`);
-                        } else {
-                            console.error(`❌ Fichier WHOIS non trouvé: ${whoisFilePath}`);
-                            console.warn(`📋 Fichiers disponibles dans le dossier data:`);
-                            const files = fs.readdirSync(path.join(__dirname, '../data'));
-                            files.forEach(file => console.log(`   - ${file}`));
-                        }
-                    } catch (mvError) {
-                        console.error(`❌ Erreur lors du Million Verifier:`, mvError.message);
-                        console.error(`📋 Stack trace:`, mvError.stack);
-                        console.error(`⏰ Heure de l'erreur: ${new Date().toISOString()}`);
-                    }
-                } else {
-                    console.log('ℹ️ Aucun fichier de la veille trouvé pour le WHOIS');
-                }
-            } catch (error) {
-                console.error('❌ Erreur lors du téléchargement ou du WHOIS:', error.message);
-            }
+        cron.schedule('0 6 * * *', async () => {
+            await this.executeDailyYesterdayDownloadAndWhois();
         }, {
             timezone: "Europe/Paris"
         });
         
         console.log('📅 Job téléchargement + WHOIS + Million Verifier programmé: tous les jours à 6h00');
+    }
+
+    // Méthode publique pour exécuter manuellement le processus complet (téléchargement + WHOIS + Million Verifier)
+    async executeDailyYesterdayDownloadAndWhois() {
+        console.log('🔄 Exécution manuelle du processus complet (téléchargement + WHOIS + Million Verifier)...');
+        try {
+            await this.dailyService.downloadDailyFiles('yesterday');
+            console.log('✅ Fichier de la veille téléchargé avec succès');
+
+            // Trouver le fichier de la veille
+            const yesterdayFile = await this.findYesterdayFile();
+            if (yesterdayFile) {
+                console.log(`🔍 Lancement du WHOIS sur le fichier: ${yesterdayFile}`);
+                console.log(`📁 Vérification de l'existence du fichier d'entrée...`);
+                
+                // Vérifier que le fichier d'entrée existe avant de lancer le WHOIS
+                const fs = require('fs');
+                const inputFilePath = path.join(__dirname, '../data', yesterdayFile);
+                if (!fs.existsSync(inputFilePath)) {
+                    console.error(`❌ Fichier d'entrée introuvable: ${inputFilePath}`);
+                    console.warn(`📋 Fichiers disponibles dans le dossier data:`);
+                    const files = fs.readdirSync(path.join(__dirname, '../data'));
+                    files.forEach(file => console.log(`   - ${file}`));
+                    return;
+                }
+                
+                console.log(`✅ Fichier d'entrée trouvé: ${inputFilePath}`);
+                const whoisFileName = await this.whoisService.analyzeCsvFile(yesterdayFile);
+                console.log(`✅ WHOIS terminé pour: ${yesterdayFile}, fichier de sortie: ${whoisFileName}`);
+
+                // Lancer le Million Verifier après le WHOIS
+                console.log(`🔍 Lancement du Million Verifier sur le fichier WHOIS: ${whoisFileName}`);
+                console.log(`⏰ Heure de lancement: ${new Date().toISOString()}`);
+                
+                try {
+                    const whoisFilePath = path.join(__dirname, '../data', whoisFileName);
+                    console.log(`📁 Chemin complet du fichier WHOIS: ${whoisFilePath}`);
+                    
+                    // Vérifier si le fichier WHOIS existe
+                    if (fs.existsSync(whoisFilePath)) {
+                        // Vérifier la taille du fichier
+                        const stats = fs.statSync(whoisFilePath);
+                        const fileSizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
+                        console.log(`📊 Taille du fichier WHOIS: ${fileSizeInMB} MB`);
+                        
+                        console.log(`✅ Fichier WHOIS trouvé, lancement du Million Verifier...`);
+                        console.log(`📁 Fichier d'entrée pour Million Verifier: ${whoisFileName}`);
+                        console.log(`🚀 [SCHEDULER] Appel du service MillionVerifier depuis executeDailyYesterdayDownloadAndWhois`);
+                        const startTime = Date.now();
+                        
+                        await this.millionVerifierService.processCsvFile(whoisFilePath);
+                        
+                        const endTime = Date.now();
+                        const duration = Math.round((endTime - startTime) / 1000);
+                        console.log(`✅ Million Verifier terminé en ${duration}s pour: ${whoisFileName}`);
+                        console.log(`⏰ Heure de fin: ${new Date().toISOString()}`);
+                    } else {
+                        console.error(`❌ Fichier WHOIS non trouvé: ${whoisFilePath}`);
+                        console.warn(`📋 Fichiers disponibles dans le dossier data:`);
+                        const files = fs.readdirSync(path.join(__dirname, '../data'));
+                        files.forEach(file => console.log(`   - ${file}`));
+                    }
+                } catch (mvError) {
+                    console.error(`❌ Erreur lors du Million Verifier:`, mvError.message);
+                    console.error(`📋 Stack trace:`, mvError.stack);
+                    console.error(`⏰ Heure de l'erreur: ${new Date().toISOString()}`);
+                }
+            } else {
+                console.log('ℹ️ Aucun fichier de la veille trouvé pour le WHOIS');
+            }
+        } catch (error) {
+            console.error('❌ Erreur lors du téléchargement ou du WHOIS:', error.message);
+            throw error; // Propager l'erreur pour la gestion côté serveur
+        }
     }
 
     // Traitement WHOIS automatique (tous les jours à 8h du matin)
@@ -299,6 +306,7 @@ class SchedulerService {
                                 
                                 console.log(`✅ Fichier WHOIS trouvé, lancement du Million Verifier...`);
                                 console.log(`📁 Fichier d'entrée pour Million Verifier: ${whoisFileName}`);
+                                console.log(`🚀 [SCHEDULER] Appel du service MillionVerifier depuis triggerJob dailyAndWhois`);
                                 const startTime = Date.now();
                                 
                                 await this.millionVerifierService.processCsvFile(whoisFilePath);

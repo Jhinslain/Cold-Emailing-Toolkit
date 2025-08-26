@@ -1309,35 +1309,19 @@ app.post('/api/personalized-messages/generate/cancel', (req, res) => {
   res.json({ success: true });
 });
 
-// Route pour déclencher manuellement le traitement WHOIS du fichier de la veille
-app.post('/api/whois/process-yesterday', requireAuth, async (req, res) => {
-  console.log('➡️  Requête traitement WHOIS fichier de la veille reçue');
-  try {
-    await scheduler.triggerJob('whois', { yesterday: true });
-    res.json({ 
-      success: true, 
-      message: 'Traitement WHOIS du fichier de la veille lancé avec succès' 
-    });
-  } catch (error) {
-    console.error('❌ Erreur traitement WHOIS fichier de la veille:', error.message);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
 
-// Route pour forcer le schedule (téléchargement + WHOIS)
-app.post('/api/schedule/daily-whois', requireAuth, async (req, res) => {
-  console.log('➡️  Requête forcer schedule (téléchargement + WHOIS) reçue');
+
+// Route pour lancer manuellement le processus complet du scheduler (téléchargement + WHOIS + Million Verifier)
+app.post('/api/scheduler/execute-daily-process', requireAuth, async (req, res) => {
+  console.log('➡️  Requête exécution manuelle du processus complet du scheduler reçue');
   try {
-    await scheduler.triggerJob('dailyAndWhois');
+    await scheduler.executeDailyYesterdayDownloadAndWhois();
     res.json({ 
       success: true, 
-      message: 'Téléchargement + WHOIS lancé avec succès !' 
+      message: 'Processus complet du scheduler exécuté avec succès ! (Téléchargement + WHOIS + Million Verifier)' 
     });
   } catch (error) {
-    console.error('❌ Erreur lors du lancement du schedule:', error.message);
+    console.error('❌ Erreur lors de l\'exécution du processus du scheduler:', error.message);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -1454,6 +1438,7 @@ app.post('/api/millionverifier/batch', async (req, res) => {
       if (fs.existsSync(originalFilePath)) {
         try {
           console.log(`[BACKEND] Utilisation du service MillionVerifier pour traiter le fichier complet`);
+          console.log(`🚀 [SERVER] Appel du service MillionVerifier depuis la route /api/millionverifier/verify`);
           
           // Utiliser notre service qui conserve toutes les colonnes
           const result = await millionVerifierService.processCsvFile(originalFilePath);
@@ -1584,6 +1569,7 @@ app.post('/api/millionverifier/process-file', requireAuth, async (req, res) => {
     }
     
     console.log(`[BACKEND] Traitement du fichier: ${inputFilePath}`);
+    console.log(`🚀 [SERVER] Appel du service MillionVerifier depuis la route /api/millionverifier/process-file`);
     
     // Utiliser le service MillionVerifier pour traiter le fichier complet
     const result = await millionVerifierService.processCsvFile(inputFilePath);
@@ -1626,9 +1612,11 @@ app.use('/api/email-accounts', emailAccountsRoutes);
 // Démarrer le service de planification
 const SchedulerService = require('./services/scheduler');
 const scheduler = new SchedulerService();
-scheduler.scheduleOpendataDownload();
+// scheduler.scheduleOpendataDownload(); // Désactivé - téléchargement automatique de l'opendata
 scheduler.scheduleDailyYesterdayDownloadAndWhois();
+// scheduler.scheduleWhoisProcessing(); // Désactivé car inclus dans la tâche de 6h
 scheduler.scheduleDataCleanup();
+console.log('📅 Scheduler activé dans le serveur principal');
 
 // Initialiser le service MillionVerifier
 console.log('🚀 Initialisation des services...');
