@@ -3,6 +3,7 @@ const OpendataService = require('./opendataService');
 const DailyService = require('./dailyService');
 const WhoisService = require('./whoisService');
 const MillionVerifierService = require('./millionVerifierService');
+const DeduplicationService = require('./deduplicationService');
 const FileService = require('./fileService');
 const path = require('path');
 
@@ -12,6 +13,7 @@ class SchedulerService {
         this.dailyService = new DailyService();
         this.whoisService = new WhoisService(path.join(__dirname, '../data'));
         this.millionVerifierService = MillionVerifierService;
+        this.deduplicationService = new DeduplicationService();
         this.fileService = new FileService(path.join(__dirname, '../data'));
         
         // Vérifier l'initialisation du service MillionVerifier
@@ -78,9 +80,9 @@ class SchedulerService {
                 const whoisFileName = await this.whoisService.analyzeCsvFile(yesterdayFile);
                 console.log(`✅ WHOIS terminé pour: ${yesterdayFile}, fichier de sortie: ${whoisFileName}`);
 
-                // Lancer le Million Verifier après le WHOIS
-                console.log(`🔍 Lancement du Million Verifier sur le fichier WHOIS: ${whoisFileName}`);
-                console.log(`⏰ Heure de lancement: ${new Date().toISOString()}`);
+                // Lancer la déduplication après le WHOIS
+                console.log(`🔍 Lancement de la déduplication sur le fichier WHOIS: ${whoisFileName}`);
+                console.log(`⏰ Heure de lancement déduplication: ${new Date().toISOString()}`);
                 
                 try {
                     const whoisFilePath = path.join(__dirname, '../data', whoisFileName);
@@ -93,27 +95,46 @@ class SchedulerService {
                         const fileSizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
                         console.log(`📊 Taille du fichier WHOIS: ${fileSizeInMB} MB`);
                         
-                        console.log(`✅ Fichier WHOIS trouvé, lancement du Million Verifier...`);
-                        console.log(`📁 Fichier d'entrée pour Million Verifier: ${whoisFileName}`);
-                        console.log(`🚀 [SCHEDULER] Appel du service MillionVerifier depuis executeDailyYesterdayDownloadAndWhois`);
-                        const startTime = Date.now();
+                        console.log(`✅ Fichier WHOIS trouvé, lancement de la déduplication...`);
+                        console.log(`📁 Fichier d'entrée pour déduplication: ${whoisFileName}`);
+                        console.log(`🚀 [SCHEDULER] Appel du service Deduplication depuis executeDailyYesterdayDownloadAndWhois`);
+                        const dedupStartTime = Date.now();
                         
-                        await this.millionVerifierService.processCsvFile(whoisFilePath);
+                        await this.deduplicationService.processCsvFile(whoisFilePath);
                         
-                        const endTime = Date.now();
-                        const duration = Math.round((endTime - startTime) / 1000);
-                        console.log(`✅ Million Verifier terminé en ${duration}s pour: ${whoisFileName}`);
-                        console.log(`⏰ Heure de fin: ${new Date().toISOString()}`);
+                        const dedupEndTime = Date.now();
+                        const dedupDuration = Math.round((dedupEndTime - dedupStartTime) / 1000);
+                        console.log(`✅ Déduplication terminée en ${dedupDuration}s pour: ${whoisFileName}`);
+                        console.log(`⏰ Heure de fin déduplication: ${new Date().toISOString()}`);
+
+                        // Lancer le Million Verifier après la déduplication
+                        console.log(`🔍 Lancement du Million Verifier sur le fichier dédupliqué...`);
+                        console.log(`⏰ Heure de lancement Million Verifier: ${new Date().toISOString()}`);
+                        
+                        try {
+                            const mvStartTime = Date.now();
+                            
+                            await this.millionVerifierService.processCsvFile(whoisFilePath);
+                            
+                            const mvEndTime = Date.now();
+                            const mvDuration = Math.round((mvEndTime - mvStartTime) / 1000);
+                            console.log(`✅ Million Verifier terminé en ${mvDuration}s pour: ${whoisFileName}`);
+                            console.log(`⏰ Heure de fin Million Verifier: ${new Date().toISOString()}`);
+                        } catch (mvError) {
+                            console.error(`❌ Erreur lors du Million Verifier:`, mvError.message);
+                            console.error(`📋 Stack trace:`, mvError.stack);
+                            console.error(`⏰ Heure de l'erreur Million Verifier: ${new Date().toISOString()}`);
+                        }
                     } else {
                         console.error(`❌ Fichier WHOIS non trouvé: ${whoisFilePath}`);
                         console.warn(`📋 Fichiers disponibles dans le dossier data:`);
                         const files = fs.readdirSync(path.join(__dirname, '../data'));
                         files.forEach(file => console.log(`   - ${file}`));
                     }
-                } catch (mvError) {
-                    console.error(`❌ Erreur lors du Million Verifier:`, mvError.message);
-                    console.error(`📋 Stack trace:`, mvError.stack);
-                    console.error(`⏰ Heure de l'erreur: ${new Date().toISOString()}`);
+                } catch (dedupError) {
+                    console.error(`❌ Erreur lors de la déduplication:`, dedupError.message);
+                    console.error(`📋 Stack trace:`, dedupError.stack);
+                    console.error(`⏰ Heure de l'erreur déduplication: ${new Date().toISOString()}`);
                 }
             } else {
                 console.log('ℹ️ Aucun fichier de la veille trouvé pour le WHOIS');
@@ -315,6 +336,25 @@ class SchedulerService {
                                 const duration = Math.round((endTime - startTime) / 1000);
                                 console.log(`✅ Million Verifier terminé en ${duration}s pour: ${whoisFileName}`);
                                 console.log(`⏰ Heure de fin: ${new Date().toISOString()}`);
+
+                                // Lancer la déduplication après le Million Verifier
+                                console.log(`🔍 Lancement de la déduplication sur le fichier Million Verifier...`);
+                                console.log(`⏰ Heure de lancement déduplication: ${new Date().toISOString()}`);
+                                
+                                try {
+                                    const dedupStartTime = Date.now();
+                                    
+                                    await this.deduplicationService.processCsvFile(whoisFilePath);
+                                    
+                                    const dedupEndTime = Date.now();
+                                    const dedupDuration = Math.round((dedupEndTime - dedupStartTime) / 1000);
+                                    console.log(`✅ Déduplication terminée en ${dedupDuration}s pour: ${whoisFileName}`);
+                                    console.log(`⏰ Heure de fin déduplication: ${new Date().toISOString()}`);
+                                } catch (dedupError) {
+                                    console.error(`❌ Erreur lors de la déduplication:`, dedupError.message);
+                                    console.error(`📋 Stack trace:`, dedupError.stack);
+                                    console.error(`⏰ Heure de l'erreur déduplication: ${new Date().toISOString()}`);
+                                }
                             } else {
                                 console.error(`❌ Fichier WHOIS non trouvé: ${whoisFilePath}`);
                                 console.warn(`📋 Fichiers disponibles dans le dossier data:`);

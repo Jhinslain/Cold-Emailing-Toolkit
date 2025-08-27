@@ -14,6 +14,9 @@ const campaignRoutes = require('./routes/campaigns');
 // Import des routes des comptes email
 const emailAccountsRoutes = require('./routes/emailAccounts');
 
+// Import des routes de déduplication
+const deduplicationRoutes = require('./routes/deduplication');
+
 // --- CONFIGURATION CORS ---
 const app = express();
 const allowedOrigins = [
@@ -1608,6 +1611,9 @@ app.use('/api/campaigns', campaignRoutes);
 
 // Routes des comptes email
 app.use('/api/email-accounts', emailAccountsRoutes);
+
+// Routes de déduplication
+app.use('/api/deduplication', deduplicationRoutes);
 
 // Démarrer le service de planification
 const SchedulerService = require('./services/scheduler');

@@ -74,6 +74,7 @@ async function updateInputFileRegistry(inputFileName, processingTime = 0, traite
         // Préserver les statistiques existantes et mettre à jour seulement verifier
         registry[inputFileName].statistiques = {
           ...registry[inputFileName].statistiques, // Garder toutes les stats existantes
+          verifier_lignes: registry[inputFileName].statistiques.verifier_lignes || 0,
           verifier_temps: processingTime > 0 ? processingTime : registry[inputFileName].statistiques.verifier_temps
         };
       }
@@ -141,7 +142,7 @@ async function updateFilesRegistry(outputFilePath, validRows, totalRows, process
         }
       };
     } else {
-      // Créer une nouvelle entrée
+      // Créer une nouvelle entrée avec des statistiques par défaut
       registry[fileName] = {
         size: fileSize,
         modified: new Date().toISOString(),
@@ -453,7 +454,10 @@ async function processCsvFile(inputFilePath) {
     await updateFilesRegistry(outputFilePath, validRows.length, dataRows.length, totalTime);
     
     // Mettre à jour le registre du fichier d'entrée pour indiquer qu'il a été traité par MillionVerifier
-    await updateInputFileRegistry(inputFileName, totalTime, "verifier");
+    await updateInputFileRegistry(inputFileName + path.extname(inputFilePath), totalTime, "verifier");
+    
+    // Remettre le traitement à vide une fois terminé
+    await updateInputFileRegistry(inputFileName + path.extname(inputFilePath), totalTime, "");
     
     // Supprimer le fichier d'entrée après traitement réussi (remplacement)
     try {
@@ -463,12 +467,12 @@ async function processCsvFile(inputFilePath) {
       console.warn(`[SERVICE] Impossible de supprimer le fichier d'entrée ${inputFilePath}:`, error.message);
     }
     
-         return {
-       total: dataRows.length,
-       valid: validCount,
-       invalid: invalidCount,
-       outputPath: outputFilePath
-     };
+    return {
+      total: dataRows.length,
+      valid: validCount,
+      invalid: invalidCount,
+      outputPath: outputFilePath
+    };
      
    } catch (error) {
      console.error(`[SERVICE] Erreur lors du traitement du fichier:`, error);

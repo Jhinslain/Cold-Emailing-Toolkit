@@ -560,11 +560,27 @@ class WhoisService {
             const filteredResults = this._filterValidResults(results);
             this._generateWhoisCsv(outputCsvPath, filteredResults);
             
+            // Récupérer les statistiques du fichier d'entrée avant de le supprimer
+            const inputFileStats = await this.fileService.getFileStats(inputCsvName);
+            
             // Mettre à jour les statistiques finales du fichier d'entrée
             const totalTime = Math.floor((Date.now() - startTime) / 1000);
             await this.fileService.updateFileStats(inputCsvName, {
                 whois_temps: totalTime
             });
+            
+            // Copier toutes les statistiques du fichier d'entrée dans le fichier de sortie
+            // et ajouter les nouvelles statistiques WHOIS
+            if (inputFileStats) {
+                await this.fileService.updateFileStats(outputCsvName, {
+                    domain_lignes: inputFileStats.domain_lignes || 0,
+                    domain_temps: inputFileStats.domain_temps || 0,
+                    whois_lignes: domains.length,
+                    whois_temps: totalTime,
+                    verifier_lignes: inputFileStats.verifier_lignes || 0,
+                    verifier_temps: inputFileStats.verifier_temps || 0
+                });
+            }
             
             // Supprimer le fichier d'entrée seulement s'il existe
             try {
@@ -624,6 +640,22 @@ class WhoisService {
             }
             const filteredResults = this._filterValidResults(results);
             this._generateWhoisCsv(outputCsvPath, filteredResults);
+            
+            // Récupérer les statistiques du fichier d'entrée avant de le supprimer
+            const inputFileStats = await this.fileService.getFileStats(inputCsvName);
+            
+            // Copier toutes les statistiques du fichier d'entrée dans le fichier de sortie
+            // et ajouter les nouvelles statistiques WHOIS
+            if (inputFileStats) {
+                await this.fileService.updateFileStats(outputCsvName, {
+                    domain_lignes: inputFileStats.domain_lignes || 0,
+                    domain_temps: inputFileStats.domain_temps || 0,
+                    whois_lignes: domains.length,
+                    whois_temps: 0,
+                    verifier_lignes: inputFileStats.verifier_lignes || 0,
+                    verifier_temps: inputFileStats.verifier_temps || 0
+                });
+            }
             
             // Supprimer le fichier d'entrée seulement s'il existe
             try {

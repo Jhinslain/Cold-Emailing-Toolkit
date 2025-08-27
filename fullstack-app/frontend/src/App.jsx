@@ -96,10 +96,29 @@ function App() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [selectedFileForStats, setSelectedFileForStats] = useState(null);
 
+  // Bloquer le scroll quand la modale est ouverte
+  useEffect(() => {
+    if (showStatsModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    // Nettoyer lors du démontage du composant
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showStatsModal]);
+
   // États pour MillionVerifier
   const [millionVerifierLoading, setMillionVerifierLoading] = useState(false);
   const [millionVerifierResults, setMillionVerifierResults] = useState(null);
   const [millionVerifierFile, setMillionVerifierFile] = useState(null);
+
+  // États pour la déduplication
+  const [deduplicationLoading, setDeduplicationLoading] = useState(false);
+  const [deduplicationResults, setDeduplicationResults] = useState(null);
+  const [deduplicationFile, setDeduplicationFile] = useState(null);
 
   // États pour le Scheduler
   const [schedulerLoading, setSchedulerLoading] = useState(false);
@@ -1053,6 +1072,8 @@ function App() {
         return 'from-orange-600 to-red-600 border-orange-500'; // Orange pour daily
       case 'verifier':
         return 'from-yellow-500 to-amber-500 border-yellow-400'; // Jaune pour Verifier
+      case 'deduplicated':
+        return 'from-blue-600 to-cyan-600 border-blue-500'; // Bleu pour dédupliqué
       case 'classique':
       default:
         return 'from-neutral-500 to-slate-500 border-neutral-400'; // Gris pour classique
@@ -1095,9 +1116,11 @@ function App() {
         return 'Daily';
       case 'verifier':
         return 'Verifier';
+      case 'deduplicated':
+        return 'Deduplicated';
       case 'classique':
-      default:
-        return 'Classique';
+        default:
+      return 'Classique';
     }
   };
 
@@ -1116,8 +1139,10 @@ function App() {
         return 'bg-orange-600 hover:bg-orange-700 border-orange-500'; // Orange pour daily
       case 'verifier':
         return 'bg-yellow-500 hover:bg-yellow-600 border-yellow-400'; // Jaune pour Verifier
+      case 'deduplicated':
+        return 'bg-blue-600 hover:bg-blue-700 border-blue-500'; // Bleu pour dédupliqué
       case 'classique':
-      default:
+        default:
         return 'bg-neutral-600 hover:bg-neutral-700 border-neutral-500'; // Gris pour classique
     }
   };
@@ -1654,6 +1679,43 @@ function App() {
     }
   };
 
+  // Fonction pour lancer la déduplication des emails
+  const handleDeduplication = async (file) => {
+    // Met à jour le champ traitement à 'dedup' pour ce fichier
+    setFiles(prevFiles => prevFiles.map(f => f.name === file.name ? { ...f, traitement: 'dedup' } : f));
+    setDeduplicationLoading(true);
+    setDeduplicationResults(null);
+    setDeduplicationFile(file.name);
+    
+    try {
+      // Appel de l'API qui traite le fichier CSV pour la déduplication
+      const res = await authFetch(`${import.meta.env.VITE_API_URL}/api/deduplication/process-file`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          inputFileName: file.name
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        showMessage('success', `Déduplication terminée avec succès ! ${data.result.stats.uniqueRows} lignes uniques conservées, ${data.result.stats.duplicateCount} doublons supprimés`);
+        setDeduplicationResults(data.result);
+        // Recharger la liste des fichiers pour voir le nouveau fichier créé
+        fetchFiles();
+      } else {
+        showMessage('error', data.error || 'Erreur lors de la déduplication');
+      }
+    } catch (error) {
+      console.error('Erreur déduplication:', error);
+      showMessage('error', 'Erreur de connexion au serveur');
+    } finally {
+      setDeduplicationLoading(false);
+      // Remet le champ traitement à vide
+      setFiles(prevFiles => prevFiles.map(f => f.name === file.name ? { ...f, traitement: '' } : f));
+    }
+  };
 
   return (
     <div className="min-h-screen relative">
@@ -1708,64 +1770,7 @@ function App() {
         </div>
       )}
 
-      {/* Stats modernes sans box */}
-      {stats && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="group relative p-6 rounded-2xl bg-gradient-to-br from-purple-500/20 to-violet-600/20 backdrop-blur-sm border border-purple-400/30 hover:border-purple-400/50 transition-all duration-300 hover:scale-105 animate-fade-in">
-              <div className="flex items-center">
-                <div className="p-3 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg">
-                  <FolderIcon className="h-8 w-8 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-purple-200">Fichiers de données</p>
-                  <p className="text-3xl font-bold text-white">{stats.dataFiles}</p>
-                </div>
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-violet-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            </div>
-            
-            <div className="group relative p-6 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-amber-600/20 backdrop-blur-sm border border-yellow-400/30 hover:border-yellow-400/50 transition-all duration-300 hover:scale-105 animate-fade-in" style={{animationDelay: '0.1s'}}>
-              <div className="flex items-center">
-                <div className="p-3 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-xl shadow-lg">
-                  <ChartBarIcon className="h-8 w-8 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-yellow-200">Fichiers traités</p>
-                  <p className="text-3xl font-bold text-white">{stats.outputFiles}</p>
-                </div>
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-amber-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            </div>
-            
-            <div className="group relative p-6 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-600/20 backdrop-blur-sm border border-green-400/30 hover:border-green-400/50 transition-all duration-300 hover:scale-105 animate-fade-in" style={{animationDelay: '0.2s'}}>
-              <div className="flex items-center">
-                <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg">
-                  <CloudArrowDownIcon className="h-8 w-8 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-green-200">Taille des données</p>
-                  <p className="text-3xl font-bold text-white">{formatFileSize(stats.totalDataSize)}</p>
-                </div>
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            </div>
-            
-            <div className="group relative p-6 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-600/20 backdrop-blur-sm border border-blue-400/30 hover:border-blue-400/50 transition-all duration-300 hover:scale-105 animate-fade-in" style={{animationDelay: '0.3s'}}>
-              <div className="flex items-center">
-                <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl shadow-lg">
-                  <UserGroupIcon className="h-8 w-8 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-blue-200">Campagnes lancées</p>
-                  <p className="text-3xl font-bold text-white">{campaigns.length}</p>
-                </div>
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Barre d'onglets moderne */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
@@ -1828,216 +1833,211 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
           <div className="glass-card p-8 rounded-2xl">
             {/* Section Outils */}
-            <div className="mb-8">
+            <div className="mb-6">
               <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
-                <CloudArrowDownIcon className="h-6 w-6 mr-3 text-blue-300" />
+                <Cog6ToothIcon className="h-6 w-6 mr-3 text-blue-300" />
                 Outils
               </h2>
-          {/* Première ligne : boutons de téléchargement */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-            <div className="flex gap-4">
-              {/* Bouton Opendata */}
-              {(() => {
-                const opendataExists = files.some(file => file.isOpendata);
-                return (
-                  <button
-                    onClick={handleOpendataDownload}
-                    disabled={opendataLoading || deleteLoading}
-                    className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              
+                            {/* Première ligne : Les 4 outils sur la même ligne */}
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                {(() => {
+                  const opendataExists = files.some(file => file.isOpendata);
+                  return (
+                    <button
+                      onClick={handleOpendataDownload}
+                      disabled={opendataLoading || deleteLoading}
+                      className="flex-1 flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed bg-neutral-700 hover:bg-neutral-600 text-white border border-neutral-600"
+                    >
+                      <CloudArrowDownIcon className="h-4 w-4 mr-2" />
+                      {opendataLoading ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 mr-2 text-white" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                          {opendataExists ? "Actualisation..." : "Téléchargement..."}
+                        </>
+                      ) : (
+                        opendataExists ? "Actualiser l'Opendata" : "Télécharger Opendata"
+                      )}
+                    </button>
+                  );
+                })()}
+                
+                <button
+                  onClick={() => setSelectedAction('daily-download')}
+                  className="flex-1 flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-medium bg-neutral-700 hover:bg-neutral-600 text-white border border-neutral-600"
+                >
+                  <GlobeAltIcon className="h-4 w-4 mr-2" />
+                  Télécharger Quotidien
+                </button>
+                
+                <button
+                  onClick={handleSchedulerLaunch}
+                  disabled={schedulerLoading}
+                  className="flex-1 flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed bg-neutral-700 hover:bg-neutral-600 text-white border border-neutral-600"
+                >
+                  {schedulerLoading ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 mr-2 text-white" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Lancement...
+                    </>
+                  ) : (
+                    <>
+                      <ClockIcon className="h-4 w-4 mr-2" />
+                      Lancer Automatisation
+                    </>
+                  )}
+                </button>
+                
+                <div className="relative flex-1">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileImport}
+                    className="hidden"
+                    id="csv-import"
+                    disabled={importLoading}
+                  />
+                  <label
+                    htmlFor="csv-import"
+                    className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-all duration-200
+                      bg-neutral-700 hover:bg-neutral-600 text-white border border-neutral-600 w-full h-full
+                      ${importLoading ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
                   >
-                    <CloudArrowDownIcon className="h-6 w-6 mr-3" />
-                    {opendataLoading ? (
+                    {importLoading ? (
                       <>
-                        <svg className="animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24">
+                        <svg className="animate-spin h-4 w-4 mr-2 text-white" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                         </svg>
-                        {opendataExists ? "Actualisation..." : "Téléchargement..."}
+                        Import...
                       </>
                     ) : (
-                      opendataExists ? "Actualiser l'Opendata" : "Télécharger Opendata"
+                      <>
+                        <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
+                        Importer CSV
+                      </>
                     )}
+                  </label>
+                </div>
+              </div>
+              
+              {/* Troisième ligne : Recherche Whois/RDAP */}
+              <div className="flex flex-row gap-3">
+                {selectedAction !== 'whois-rdap-single' ? (
+                  <button
+                    className="flex-1 flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-medium bg-neutral-700 hover:bg-neutral-600 text-white border border-neutral-600"
+                    onClick={() => setSelectedAction('whois-rdap-single')}
+                  >
+                    <MagnifyingGlassIcon className="h-4 w-4 mr-2" />
+                    Recherche Whois/RDAP
                   </button>
-                );
-              })()}
-              <button
-                onClick={() => setSelectedAction('daily-download')}
-                className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium"
-              >
-                <GlobeAltIcon className="h-6 w-6 mr-3" />
-                Télécharger Quotidien
-              </button>
-            </div>
-            {/* Bouton Import CSV à droite */}
-            <div className="relative">
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileImport}
-                className="hidden"
-                id="csv-import"
-                disabled={importLoading}
-              />
-              <label
-                htmlFor="csv-import"
-                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-base font-semibold cursor-pointer transition-all duration-200
-                  bg-gradient-to-r from-emerald-500 to-blue-500 shadow-lg
-                  text-white
-                  ${importLoading ? 'opacity-50 cursor-not-allowed' : 'hover:from-emerald-600 hover:to-blue-600 hover:scale-105'}
-                `}
-                style={{ minWidth: 180, letterSpacing: 0.5 }}
-              >
-                {importLoading ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24">
+                ) : (
+                  <form
+                    className="flex items-center gap-2 w-full"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!whoisInput.trim()) return;
+                      setWhoisLoading(true);
+                      setWhoisResult(null);
+                      try {
+                        const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/whois/single`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ domain: whoisInput.trim() })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                          setWhoisResult(data.result);
+                        } else {
+                          setWhoisResult({ domain: whoisInput, error: data.error || 'Erreur lors de la recherche' });
+                        }
+                      } catch (error) {
+                        setWhoisResult({ domain: whoisInput, error: 'Erreur de connexion au serveur' });
+                      } finally {
+                        setWhoisLoading(false);
+                      }
+                    }}
+                  >
+                    <button
+                      type="submit"
+                      className="inline-flex items-center px-3 py-2.5 bg-neutral-600 rounded-l-lg hover:bg-neutral-500 disabled:opacity-50"
+                      disabled={whoisLoading || !whoisInput.trim()}
+                      style={{ border: 0 }}
+                      tabIndex={0}
+                      title="Lancer la recherche"
+                    >
+                      <MagnifyingGlassIcon className="h-4 w-4 text-white" />
+                    </button>
+                    <input
+                      type="text"
+                      className="flex-1 px-3 py-2.5 rounded-r-lg bg-neutral-700 text-white border-t border-b border-r border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-500"
+                      placeholder="Entrer un domaine .fr"
+                      value={whoisInput}
+                      onChange={e => setWhoisInput(e.target.value)}
+                      autoFocus
+                      disabled={whoisLoading}
+                      style={{ minWidth: 0 }}
+                    />
+                    <button
+                      type="button"
+                      className="ml-2 text-neutral-400 hover:text-white"
+                      onClick={() => { setSelectedAction(null); setWhoisInput(""); setWhoisResult(null); }}
+                      title="Fermer"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </form>
+                )}
+              </div>
+              
+              {/* Affichage du résultat Whois */}
+              {whoisLoading && (
+                <div className="mt-3 bg-neutral-700 border border-neutral-600 rounded-lg p-3 text-neutral-300 text-sm max-w-md">
+                  <span>Recherche en cours...</span>
+                </div>
+              )}
+              {whoisResult && !whoisLoading && (
+                <div className="mt-3 bg-neutral-700 border border-neutral-600 rounded-lg p-3 text-white text-sm max-w-md">
+                  <div className="font-bold text-neutral-300 mb-1">{whoisResult.domain}</div>
+                  {whoisResult.error ? (
+                    <div className="text-red-400">{whoisResult.error}</div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div><span className="font-semibold text-neutral-300">Email :</span> {whoisResult.contacts?.best_email || <span className="text-neutral-400 italic">Non trouvé</span>}</div>
+                      <div><span className="font-semibold text-neutral-300">Numéro :</span> {whoisResult.contacts?.best_phone || <span className="text-neutral-400 italic">Non trouvé</span>}</div>
+                      <div><span className="font-semibold text-neutral-300">Organisation :</span> {whoisResult.rdap_info?.organization || whoisResult.whois_info?.registrar || <span className="text-neutral-400 italic">Non trouvé</span>}</div>
+                      <div><span className="font-semibold text-neutral-300">Adresse :</span> {(() => {
+                        const adr = whoisResult.rdap_info?.address;
+                        if (Array.isArray(adr)) return adr.filter(Boolean).join(', ');
+                        if (typeof adr === 'string') return adr;
+                        return <span className="text-neutral-400 italic">Non trouvée</span>;
+                      })()}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Affichage du progrès d'import */}
+              {importProgress && (
+                <div className="mt-3 p-3 bg-neutral-700 border border-neutral-600 rounded-lg">
+                  <div className="flex items-center text-neutral-300 text-sm">
+                    <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                     </svg>
-                    Import...
-                  </>
-                ) : (
-                  <>
-                    <ArrowUpTrayIcon className="h-7 w-7 mr-2 text-white" />
-                    Importer CSV
-                  </>
-                )}
-              </label>
-            </div>
-          </div>
-          {/* Deuxième ligne : bouton Whois/RDAP sur 1 domaine */}
-          <div className="flex flex-row gap-4 mt-6">
-            {selectedAction !== 'whois-rdap-single' ? (
-              <button
-                className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium"
-                onClick={() => setSelectedAction('whois-rdap-single')}
-              >
-                <MagnifyingGlassIcon className="h-6 w-6 mr-3" />
-                Recherche Whois/RDAP
-              </button>
-            ) : (
-              <form
-                className="flex items-center gap-2 w-full max-w-md"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!whoisInput.trim()) return;
-                  setWhoisLoading(true);
-                  setWhoisResult(null);
-                  try {
-                    const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/whois/single`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ domain: whoisInput.trim() })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                      setWhoisResult(data.result);
-                    } else {
-                      setWhoisResult({ domain: whoisInput, error: data.error || 'Erreur lors de la recherche' });
-                    }
-                  } catch (error) {
-                    setWhoisResult({ domain: whoisInput, error: 'Erreur de connexion au serveur' });
-                  } finally {
-                    setWhoisLoading(false);
-                  }
-                }}
-              >
-                {/* Plus de bouton 'Lancer', la loupe à gauche sert de submit */}
-                <button
-                  type="submit"
-                  className="inline-flex items-center px-4 py-3 bg-glass-200 rounded-l-lg h-12 hover:bg-blue-100 focus:bg-blue-200 disabled:opacity-50"
-                  disabled={whoisLoading || !whoisInput.trim()}
-                  style={{ border: 0 }}
-                  tabIndex={0}
-                  title="Lancer la recherche"
-                >
-                  <MagnifyingGlassIcon className="h-6 w-6 text-blue-400" />
-                </button>
-                <input
-                  type="text"
-                  className="flex-1 px-6 py-3 h-12 rounded-r-lg bg-neutral-700 text-white border-t border-b border-r border-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent-500"
-                  placeholder="Entrer un domaine .fr"
-                  value={whoisInput}
-                  onChange={e => setWhoisInput(e.target.value)}
-                  autoFocus
-                  disabled={whoisLoading}
-                  style={{ minWidth: 0 }}
-                />
-                <button
-                  type="button"
-                  className="ml-2 text-neutral-400 hover:text-white"
-                  onClick={() => { setSelectedAction(null); setWhoisInput(""); setWhoisResult(null); }}
-                  title="Fermer"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </form>
-            )}
-          </div>
-          {/* Affichage du résultat fictif (à remplacer par l'appel réel) */}
-          {whoisLoading && (
-            <div className="mt-2 bg-neutral-700 border border-neutral-600 rounded-lg p-4 text-blue-300 max-w-md">
-              <span>Recherche en cours...</span>
-            </div>
-          )}
-          {whoisResult && !whoisLoading && (
-            <div className="mt-2 bg-neutral-700 border border-neutral-600 rounded-lg p-4 text-white max-w-md">
-              <div className="font-bold text-blue-300 mb-1">{whoisResult.domain}</div>
-              {whoisResult.error ? (
-                <div className="text-red-400">{whoisResult.error}</div>
-              ) : (
-                <div className="space-y-1 text-sm">
-                  <div><span className="font-semibold text-blue-200">Email :</span> {whoisResult.contacts?.best_email || <span className="text-glass-400 italic">Non trouvé</span>}</div>
-                  <div><span className="font-semibold text-blue-200">Numéro :</span> {whoisResult.contacts?.best_phone || <span className="text-glass-400 italic">Non trouvé</span>}</div>
-                  <div><span className="font-semibold text-blue-200">Organisation :</span> {whoisResult.rdap_info?.organization || whoisResult.whois_info?.registrar || <span className="text-glass-400 italic">Non trouvé</span>}</div>
-                  <div><span className="font-semibold text-blue-200">Adresse :</span> {(() => {
-                    const adr = whoisResult.rdap_info?.address;
-                    if (Array.isArray(adr)) return adr.filter(Boolean).join(', ');
-                    if (typeof adr === 'string') return adr;
-                    return <span className="text-glass-400 italic">Non trouvée</span>;
-                  })()}</div>
+                    <span>{importProgress}</span>
+                  </div>
                 </div>
               )}
-            </div>
-          )}
-          
-          {/* Affichage du progrès d'import */}
-          {importProgress && (
-            <div className="mt-4 p-3 bg-blue-500/20 rounded-lg border border-blue-500/30">
-              <div className="flex items-center text-blue-300">
-                <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                </svg>
-                <span className="text-sm">{importProgress}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Troisième ligne : bouton Scheduler */}
-          <div className="flex flex-row gap-4 mt-6">
-            <button
-              onClick={handleSchedulerLaunch}
-              disabled={schedulerLoading}
-              className="glass-button-primary flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {schedulerLoading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                  </svg>
-                  Lancement...
-                </>
-              ) : (
-                                  <>
-                    <ClockIcon className="h-6 w-6 mr-3" />
-                    Lancer le Processus Complet
-                  </>
-              )}
-            </button>
-          </div>
             </div>
 
   
@@ -2146,14 +2146,20 @@ function App() {
                       className={`glass-card glass-card-hover p-6 rounded-2xl bg-gradient-to-br ${getFileTypeColor(file)} animate-fade-in relative transition-all duration-200 ${isSelected ? 'ring-2 ring-accent-400 ring-offset-2 ring-offset-dark-600' : ''}`}
                       style={{animationDelay: `${index * 0.1}s`}}
                     >
-                      {/* Affichage du statut de traitement WHOIS (ou autre) */}
+                      {/* Affichage du statut de traitement WHOIS, MillionVerifier ou Déduplication */}
                       {file.traitement && file.traitement !== '' && (
                         <div className="flex items-center gap-2 mb-2">
                           <svg className="animate-spin h-5 w-5 text-blue-200" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                           </svg>
-                          <span className="text-blue-100 font-semibold text-sm tracking-wide">Traitement : {file.traitement.toUpperCase()}</span>
+                          <span className="text-blue-100 font-semibold text-sm tracking-wide">
+                            Traitement : {
+                              file.traitement === 'verifier' ? 'MILLION VERIFIER' :
+                              file.traitement === 'dedup' ? 'DÉDUPLICATION' :
+                              file.traitement.toUpperCase()
+                            }
+                          </span>
                         </div>
                       )}
                       {!isWhoisTerminal && (
@@ -2270,8 +2276,8 @@ function App() {
                   </button>
                 )}
                 
-                {/* Bouton WHOIS - pour tous les fichiers sauf les fichiers WHOIS et Verifier */}
-                {file.type !== 'whois' && file.type !== 'verifier' && (
+                {/* Bouton WHOIS - seulement pour les fichiers domains */}
+                {file.type === 'domains' && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleWhoisAnalyze(file); }}
                     className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-purple-600 hover:bg-purple-700"
@@ -2281,8 +2287,21 @@ function App() {
                   </button>
                 )}
 
-                {/* Bouton MillionVerifier - pour tous les fichiers sauf les fichiers Verifier */}
-                {file.type !== 'verifier' && (
+                {/* Bouton Déduplication - seulement pour les fichiers WHOIS */}
+                {file.type === 'whois' && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeduplication(file); }}
+                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-indigo-500 hover:bg-indigo-600"
+                  >
+                    <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Déduplication
+                  </button>
+                )}
+
+                {/* Bouton MillionVerifier - seulement pour les fichiers deduplicated */}
+                {file.type === 'deduplicated' && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleMillionVerifier(file); }}
                     className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-yellow-500 hover:bg-yellow-600"
@@ -2644,6 +2663,12 @@ function App() {
                         {files.reduce((sum, f) => sum + (f.statistiques?.verifier_lignes || 0), 0).toLocaleString()}
                       </span>
                     </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-300 text-blue-300">Déduplication :</span>
+                      <span className="text-blue-300 font-semibold">
+                        {files.reduce((sum, f) => sum + (f.statistiques?.dedup_lignes || 0), 0).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2678,6 +2703,16 @@ function App() {
                           const totalVerifierLines = files.reduce((sum, f) => sum + (f.statistiques?.verifier_lignes || 0), 0);
                           const filesWithVerifierLines = files.filter(f => f.statistiques?.verifier_lignes > 0).length;
                           return filesWithVerifierLines > 0 ? Math.round(totalVerifierLines / filesWithVerifierLines).toLocaleString() : '0';
+                        })()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-300 text-blue-300">Lignes déduplication moyennes :</span>
+                      <span className="text-blue-300 font-semibold">
+                        {(() => {
+                          const totalDedupLines = files.reduce((sum, f) => sum + (f.statistiques?.dedup_lignes || 0), 0);
+                          const filesWithDedupLines = files.filter(f => f.statistiques?.dedup_lignes > 0).length;
+                          return filesWithDedupLines > 0 ? Math.round(totalDedupLines / filesWithDedupLines).toLocaleString() : '0';
                         })()}
                       </span>
                     </div>
@@ -3666,8 +3701,11 @@ function App() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-neutral-800 border border-neutral-600 rounded-2xl p-8 max-w-2xl w-full mx-4 animate-slide-up shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">
-                📊 Statistiques du fichier
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Statistiques du fichier
               </h3>
               <button
                 onClick={() => { setShowStatsModal(false); setSelectedFileForStats(null); }}
@@ -3681,7 +3719,7 @@ function App() {
             
             <div className="mb-6">
               <h4 className="text-lg font-semibold text-white mb-2">
-                📁 {selectedFileForStats.name}
+                {selectedFileForStats.name}
               </h4>
               <div className="text-sm text-neutral-400">
                 Type: <span className="text-blue-300">{getFileTypeName(selectedFileForStats)}</span> | 
@@ -3700,7 +3738,7 @@ function App() {
                     <div className="text-2xl font-bold text-white">
                       {selectedFileForStats.statistiques?.domain_lignes || 0}
                     </div>
-                    <div className="text-sm text-neutral-400">Lignes téléchargées</div>
+                    <div className="text-sm text-neutral-400">Domaines téléchargés</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">
@@ -3721,11 +3759,32 @@ function App() {
                     <div className="text-2xl font-bold text-white">
                       {selectedFileForStats.statistiques?.whois_lignes || 0}
                     </div>
-                    <div className="text-sm text-neutral-400">Lignes traitées</div>
+                    <div className="text-sm text-neutral-400">Contacts obtenus</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">
                       {selectedFileForStats.statistiques?.whois_temps || 0}s
+                    </div>
+                    <div className="text-sm text-neutral-400">Temps de traitement</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section Déduplication */}
+              <div className="bg-neutral-700/50 rounded-lg p-4 border-2 border-indigo-500">
+                <h5 className="text-md font-semibold text-white mb-3">
+                  Traitement Déduplication
+                </h5>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedFileForStats.statistiques?.dedup_lignes || 0}
+                    </div>
+                    <div className="text-sm text-neutral-400">Emails supprimés</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedFileForStats.statistiques?.dedup_temps || 0}s
                     </div>
                     <div className="text-sm text-neutral-400">Temps de traitement</div>
                   </div>
@@ -3742,7 +3801,7 @@ function App() {
                     <div className="text-2xl font-bold text-white">
                       {selectedFileForStats.statistiques?.verifier_lignes || 0}
                     </div>
-                    <div className="text-sm text-neutral-400">Lignes traitées</div>
+                    <div className="text-sm text-neutral-400">Emails vérifiés</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">
@@ -3753,44 +3812,12 @@ function App() {
                 </div>
               </div>
 
-              {/* Résumé des performances */}
-              <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg p-4 border border-blue-500/30">
-                <h5 className="text-md font-semibold text-white mb-3">
-                  📈 Résumé des performances
-                </h5>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-neutral-400">Total des lignes traitées :</span>
-                    <div className="text-lg font-bold text-white">
-                      {Math.max(
-                        selectedFileForStats.statistiques?.domain_lignes || 0,
-                        selectedFileForStats.statistiques?.whois_lignes || 0,
-                        selectedFileForStats.statistiques?.verifier_lignes || 0
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-neutral-400">Temps total :</span>
-                    <div className="text-lg font-bold text-white">
-                      {(
-                        (selectedFileForStats.statistiques?.domain_temps || 0) +
-                        (selectedFileForStats.statistiques?.whois_temps || 0) +
-                        (selectedFileForStats.statistiques?.verifier_temps || 0)
-                      )}s
-                    </div>
-                  </div>
-                </div>
-              </div>
+
+
+
             </div>
 
-            <div className="flex justify-end mt-6">
-              <button
-                onClick={() => { setShowStatsModal(false); setSelectedFileForStats(null); }}
-                className="px-6 py-2 bg-neutral-600 hover:bg-neutral-700 text-white font-medium rounded-lg transition-all duration-200"
-              >
-                Fermer
-              </button>
-            </div>
+
           </div>
         </div>
       )}
