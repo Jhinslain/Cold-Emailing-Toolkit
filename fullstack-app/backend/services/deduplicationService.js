@@ -86,17 +86,8 @@ class DeduplicationService {
                                 await this.writeCsvFile(rows, outputFilePath);
                                 console.log(`💾 Fichier mis à jour: ${outputFilePath}`);
                                 
-                                // Mettre à jour le registre des fichiers avec le nouveau nombre de lignes
-                                try {
-                                    const stats = {
-                                        duplicateCount,
-                                        duration: Math.round((Date.now() - startTime) / 1000)
-                                    };
-                                    await this.updateFileRegistry(inputFilePath, rows.length, stats);
-                                    console.log(`📋 Registre des fichiers mis à jour: ${rows.length} lignes`);
-                                } catch (registryError) {
-                                    console.warn(`⚠️ Erreur lors de la mise à jour du registre: ${registryError.message}`);
-                                }
+                                // Les statistiques sont maintenant gérées par le StatisticsService centralisé
+                                // Plus besoin de mettre à jour le registre ici
                             }
 
                             const endTime = Date.now();
@@ -239,14 +230,17 @@ class DeduplicationService {
                     registry[fileName].statistiques = {};
                 }
                 
-                // Préserver les anciennes statistiques et ajouter/mettre à jour la déduplication
+                // Préserver TOUTES les anciennes statistiques et ajouter/mettre à jour la déduplication
+                const existingStats = registry[fileName].statistiques;
                 registry[fileName].statistiques = {
-                    domain_lignes: registry[fileName].statistiques.domain_lignes || 0,
-                    domain_temps: registry[fileName].statistiques.domain_temps || 0,
-                    whois_lignes: registry[fileName].statistiques.whois_lignes || 0,
-                    whois_temps: registry[fileName].statistiques.whois_temps || 0,
-                    verifier_lignes: registry[fileName].statistiques.verifier_lignes || 0,
-                    verifier_temps: registry[fileName].statistiques.verifier_temps || 0,
+                    // Préserver toutes les statistiques existantes
+                    domain_lignes: existingStats.domain_lignes || 0,
+                    domain_temps: existingStats.domain_temps || 0,
+                    whois_lignes: existingStats.whois_lignes || 0,
+                    whois_temps: existingStats.whois_temps || 0,
+                    verifier_lignes: existingStats.verifier_lignes || 0,
+                    verifier_temps: existingStats.verifier_temps || 0,
+                    // Ajouter/mettre à jour la déduplication
                     dedup_lignes: stats.duplicateCount,
                     dedup_temps: stats.duration
                 };
@@ -256,6 +250,7 @@ class DeduplicationService {
                 console.log(`📋 Registre mis à jour pour ${fileName}: ${lineCount} lignes`);
                 console.log(`📊 Statistiques déduplication: ${stats.duplicateCount} lignes supprimées en ${stats.duration}s`);
                 console.log(`🏷️ Type du fichier changé à: deduplicated`);
+                console.log(`📈 Statistiques préservées: domain=${existingStats.domain_lignes || 0}, whois=${existingStats.whois_lignes || 0}, verifier=${existingStats.verifier_lignes || 0}`);
             } else {
                 console.warn(`⚠️ Fichier ${fileName} non trouvé dans le registre`);
             }

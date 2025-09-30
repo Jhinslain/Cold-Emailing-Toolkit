@@ -202,8 +202,10 @@ class WhoisAnalyzer {
         ];
         // Mots-clés à bloquer dans l'email (local ou domaine)
         const BLOCKED_KEYWORDS = [
-            'ovh', 'ionos', '1und1', 'o2switch', 'histinger', 'whois', 'privacy', 'protect', 'guard', 'proxy',
-            'domain', 'dns', 'support', 'info', 'registrar'
+            'ovh', 'ionos', '1und1', 'o2switch', 'hostinger', 'whois', 'privacy', 'protect', 'guard', 'proxy',
+            'domain', 'dns', 'support', 'info', 'registrar',
+            // Nouveaux mots-clés pour les fournisseurs web
+            'dev', 'web', 'computer', 'seo'
         ];
         // Blocage par domaine exact ou sous-domaine
         if (BLOCKED_EMAIL_DOMAINS.some(blockedDomain => 
@@ -214,6 +216,20 @@ class WhoisAnalyzer {
         // Blocage par mot-clé dans l'email (local ou domaine)
         if (BLOCKED_KEYWORDS.some(kw => emailLower.includes(kw))) return true;
         return false;
+    }
+
+    // Nouvelle méthode pour bloquer les organisations de fournisseurs web
+    isBlockedOrganization(organization) {
+        if (!organization) return false;
+        const orgLower = organization.toLowerCase();
+        
+        // Mots-clés spécifiques pour les organisations de fournisseurs web
+        const BLOCKED_ORG_KEYWORDS = [
+            'web', 'computer', 'seo', 'dev', 'development', 
+        ];
+        
+        // Vérifier si l'organisation contient un des mots-clés bloqués
+        return BLOCKED_ORG_KEYWORDS.some(keyword => orgLower.includes(keyword));
     }
 
     // Méthode utilitaire pour nettoyer les numéros de téléphone
@@ -385,7 +401,25 @@ class WhoisService {
             const analyzer = row.analyzer;
             const email = row.email;
             if (!email) return false;
+            
+            // Vérifier si l'email est bloqué
             if (analyzer && analyzer.isBlockedEmail(email)) return false;
+            
+            // Vérifier si l'organisation est bloquée
+            if (analyzer && analyzer.results) {
+                const rdapOrg = analyzer.results.rdap_info?.organization;
+                const whoisOrg = analyzer.results.whois_info?.registrar;
+                
+                if (analyzer.isBlockedOrganization(rdapOrg)) {
+                    console.log(`[WHOIS] Organisation RDAP bloquée: ${rdapOrg} pour ${row.domain}`);
+                    return false;
+                }
+                if (analyzer.isBlockedOrganization(whoisOrg)) {
+                    console.log(`[WHOIS] Organisation WHOIS bloquée: ${whoisOrg} pour ${row.domain}`);
+                    return false;
+                }
+            }
+            
             return true;
         });
     }
@@ -481,12 +515,11 @@ class WhoisService {
         const outputCsvName = baseName + '_whois.csv';
         const outputCsvPath = path.join(this.dataDir, outputCsvName);
         
-        // Mettre à jour les statistiques du fichier d'entrée
-        const startTime = Date.now();
-        await this.fileService.updateFileStats(inputCsvName, {
-            whois_lignes: domains.length,
-            whois_temps: 0 // Sera mis à jour à la fin
-        });
+        // Récupérer les statistiques existantes du fichier d'entrée
+        const existingStats = await this.fileService.getFileStats(inputCsvName);
+        
+            // Les statistiques sont maintenant gérées par le StatisticsService centralisé
+            const startTime = Date.now();
         
         const stats = {
             total: domains.length,
@@ -560,27 +593,8 @@ class WhoisService {
             const filteredResults = this._filterValidResults(results);
             this._generateWhoisCsv(outputCsvPath, filteredResults);
             
-            // Récupérer les statistiques du fichier d'entrée avant de le supprimer
-            const inputFileStats = await this.fileService.getFileStats(inputCsvName);
-            
-            // Mettre à jour les statistiques finales du fichier d'entrée
-            const totalTime = Math.floor((Date.now() - startTime) / 1000);
-            await this.fileService.updateFileStats(inputCsvName, {
-                whois_temps: totalTime
-            });
-            
-            // Copier toutes les statistiques du fichier d'entrée dans le fichier de sortie
-            // et ajouter les nouvelles statistiques WHOIS
-            if (inputFileStats) {
-                await this.fileService.updateFileStats(outputCsvName, {
-                    domain_lignes: inputFileStats.domain_lignes || 0,
-                    domain_temps: inputFileStats.domain_temps || 0,
-                    whois_lignes: domains.length,
-                    whois_temps: totalTime,
-                    verifier_lignes: inputFileStats.verifier_lignes || 0,
-                    verifier_temps: inputFileStats.verifier_temps || 0
-                });
-            }
+            // Les statistiques sont maintenant gérées par le StatisticsService centralisé
+            // Plus besoin de gérer les statistiques ici
             
             // Supprimer le fichier d'entrée seulement s'il existe
             try {
@@ -593,7 +607,8 @@ class WhoisService {
             }
             
             await this.fileService.updateFileLineCount(outputCsvName);
-            await this.fileService.removeFileFromRegistry(inputCsvName);
+            // Note: Ne pas supprimer l'ancien fichier du registre ici
+            // Le scheduler gérera le transfert de statistiques avec transferStats
             sendLog('refresh', 'Actualisation de la liste des fichiers...');
             console.log('\n' + '🎉 TRAITEMENT TERMINÉ ' + '🎉'.repeat(10));
             displayStats();
@@ -630,6 +645,8 @@ class WhoisService {
             const baseName = inputCsvName.replace(/\.csv$/i, '');
             const outputCsvName = baseName + '_whois.csv';
             const outputCsvPath = path.join(this.dataDir, outputCsvName);
+            
+            // Les statistiques sont maintenant gérées par le StatisticsService centralisé
             const results = [];
             for (const domain of domains) {
                 const analyzer = new WhoisAnalyzer(domain);
@@ -640,22 +657,6 @@ class WhoisService {
             }
             const filteredResults = this._filterValidResults(results);
             this._generateWhoisCsv(outputCsvPath, filteredResults);
-            
-            // Récupérer les statistiques du fichier d'entrée avant de le supprimer
-            const inputFileStats = await this.fileService.getFileStats(inputCsvName);
-            
-            // Copier toutes les statistiques du fichier d'entrée dans le fichier de sortie
-            // et ajouter les nouvelles statistiques WHOIS
-            if (inputFileStats) {
-                await this.fileService.updateFileStats(outputCsvName, {
-                    domain_lignes: inputFileStats.domain_lignes || 0,
-                    domain_temps: inputFileStats.domain_temps || 0,
-                    whois_lignes: domains.length,
-                    whois_temps: 0,
-                    verifier_lignes: inputFileStats.verifier_lignes || 0,
-                    verifier_temps: inputFileStats.verifier_temps || 0
-                });
-            }
             
             // Supprimer le fichier d'entrée seulement s'il existe
             try {

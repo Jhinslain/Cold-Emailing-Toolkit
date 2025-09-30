@@ -351,10 +351,12 @@ class RegistryService {
         const physicalFiles = fs.readdirSync(this.dataDir)
             .filter(file => file.endsWith('.csv') || file.endsWith('.txt'));
         
-        // Supprimer les entrées pour les fichiers qui n'existent plus
+        // Supprimer les entrées pour les fichiers qui n'existent plus (sauf s'ils sont archivés)
         for (const filename of Object.keys(registry)) {
-            if (!physicalFiles.includes(filename)) {
+            const fileInfo = registry[filename];
+            if (!physicalFiles.includes(filename) && !fileInfo.archived) {
                 delete registry[filename];
+                console.log(`🗑️ Fichier ${filename} supprimé du registre (n'existe plus physiquement)`);
             }
         }
         

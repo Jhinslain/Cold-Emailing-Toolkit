@@ -32,149 +32,9 @@ const REQUEST_TIMEOUT = 20000; // 20 secondes
 const API_TIMEOUT = 15; // Timeout de l'API MillionVerifier
 const MAX_RETRIES = 2;
 
-/**
- * Met à jour le registre du fichier d'entrée pour indiquer son statut de traitement
- * @param {string} inputFileName Nom du fichier d'entrée
- * @param {number} processingTime Temps de traitement en secondes
- * @param {string} traitement Type de traitement ("verifier" pour MillionVerifier)
- */
-async function updateInputFileRegistry(inputFileName, processingTime = 0, traitement = "verifier") {
-  try {
-    const registryPath = path.join(__dirname, '../data/files-registry.json');
-    
-    // Lire le fichier registry existant
-    let registry = {};
-    try {
-      const registryContent = await fs.readFile(registryPath, 'utf-8');
-      registry = JSON.parse(registryContent);
-    } catch (error) {
-      console.warn('[SERVICE] Fichier registry non trouvé, création d\'un nouveau');
-    }
-    
-    // Mettre à jour l'entrée du fichier d'entrée
-    if (registry[inputFileName]) {
-      // Préserver toutes les données existantes et ajouter seulement le nouveau traitement
-      registry[inputFileName] = {
-        ...registry[inputFileName], // Garder toutes les données existantes
-        traitement: traitement,     // Mettre à jour le traitement
-        lastUpdated: new Date().toISOString()
-      };
-      
-      // Mettre à jour les statistiques verifier en préservant les autres
-      if (!registry[inputFileName].statistiques) {
-        registry[inputFileName].statistiques = {
-          domain_lignes: 0,
-          domain_temps: 0,
-          whois_lignes: 0,
-          whois_temps: 0,
-          verifier_lignes: 0,
-          verifier_temps: 0
-        };
-      } else {
-        // Préserver les statistiques existantes et mettre à jour seulement verifier
-        registry[inputFileName].statistiques = {
-          ...registry[inputFileName].statistiques, // Garder toutes les stats existantes
-          verifier_lignes: registry[inputFileName].statistiques.verifier_lignes || 0,
-          verifier_temps: processingTime > 0 ? processingTime : registry[inputFileName].statistiques.verifier_temps
-        };
-      }
-    }
-    
-    // Écrire le fichier registry mis à jour
-    await fs.writeFile(registryPath, JSON.stringify(registry, null, 2), 'utf-8');
-    console.log(`[SERVICE] Registry mis à jour pour ${inputFileName}: traitement = ${traitement}`);
-    
-  } catch (error) {
-    console.error('[SERVICE] Erreur lors de la mise à jour du registry du fichier d\'entrée:', error.message);
-  }
-}
+// Fonctions de mise à jour du registry supprimées - maintenant gérées par StatisticsService
 
-/**
- * Met à jour le fichier files-registry.json avec les informations du fichier de sortie
- * @param {string} outputFilePath Chemin vers le fichier de sortie
- * @param {number} validRows Nombre de lignes valides écrites
- * @param {number} totalRows Nombre total de lignes traitées
- * @param {number} processingTime Temps de traitement en secondes
- */
-async function updateFilesRegistry(outputFilePath, validRows, totalRows, processingTime = 0) {
-  try {
-    const registryPath = path.join(__dirname, '../data/files-registry.json');
-    
-    // Lire le fichier registry existant
-    let registry = {};
-    try {
-      const registryContent = await fs.readFile(registryPath, 'utf-8');
-      registry = JSON.parse(registryContent);
-    } catch (error) {
-      console.warn('[SERVICE] Fichier registry non trouvé, création d\'un nouveau');
-    }
-    
-    // Extraire le nom du fichier de sortie
-    const fileName = path.basename(outputFilePath);
-    
-    // Calculer la taille du fichier de sortie
-    let fileSize = 0;
-    try {
-      const stats = await fs.stat(outputFilePath);
-      fileSize = stats.size;
-    } catch (error) {
-      console.warn(`[SERVICE] Impossible de récupérer la taille du fichier ${outputFilePath}:`, error.message);
-    }
-    
-    // Mettre à jour ou créer l'entrée pour ce fichier
-    if (registry[fileName]) {
-      // Préserver les données existantes et mettre à jour seulement les champs nécessaires
-      registry[fileName] = {
-        ...registry[fileName], // Garder toutes les données existantes
-        size: fileSize,
-        modified: new Date().toISOString(),
-        type: "verifier",
-        totalLines: validRows,
-        lastUpdated: new Date().toISOString(),
-        totalRows: totalRows,
-        validRows: validRows,
-        invalidRows: totalRows - validRows,
-        traitement: "verifier", // Indiquer que le fichier a été traité par MillionVerifier
-        statistiques: {
-          ...registry[fileName].statistiques, // Préserver les stats existantes
-          verifier_lignes: validRows,
-          verifier_temps: processingTime
-        }
-      };
-    } else {
-      // Créer une nouvelle entrée avec des statistiques par défaut
-      registry[fileName] = {
-        size: fileSize,
-        modified: new Date().toISOString(),
-        type: "verifier",
-        totalLines: validRows,
-        lastUpdated: new Date().toISOString(),
-        dates: [],
-        localisations: [],
-        mergedFrom: [],
-        totalRows: totalRows,
-        validRows: validRows,
-        invalidRows: totalRows - validRows,
-        traitement: "verifier", // Indiquer que le fichier a été traité par MillionVerifier
-        statistiques: {
-          domain_lignes: 0,
-          domain_temps: 0,
-          whois_lignes: 0,
-          whois_temps: 0,
-          verifier_lignes: validRows,
-          verifier_temps: processingTime
-        }
-      };
-    }
-    
-    // Écrire le fichier registry mis à jour
-    await fs.writeFile(registryPath, JSON.stringify(registry, null, 2), 'utf-8');
-    console.log(`[SERVICE] Registry mis à jour pour ${fileName}: ${validRows} lignes valides sur ${totalRows} total, taille: ${fileSize} octets, temps: ${processingTime}s`);
-    
-  } catch (error) {
-    console.error('[SERVICE] Erreur lors de la mise à jour du registry:', error.message);
-  }
-}
+// Fonctions de mise à jour du registry supprimées - maintenant gérées par StatisticsService
 
 /**
  * Vérifie une liste d'emails via MillionVerifier avec gestion des batches et délais
@@ -310,12 +170,12 @@ async function processCsvFile(inputFilePath) {
     // Vérifier que le fichier existe
     await fs.access(inputFilePath);
     
-    // Mettre à jour le registre du fichier d'entrée pour indiquer qu'il est en cours de traitement par MillionVerifier
-    const inputFileName = path.basename(inputFilePath, path.extname(inputFilePath));
-    await updateInputFileRegistry(inputFileName + path.extname(inputFilePath), 0, "verifier");
+    // Les statistiques sont maintenant gérées par le StatisticsService centralisé
+    // Plus besoin de mettre à jour le registre ici
     
     // Générer le nom du fichier de sortie avec suffixe _verifier
     const inputDir = path.dirname(inputFilePath);
+    const inputFileName = path.basename(inputFilePath, '.csv');
     const outputFilePath = path.join(inputDir, `${inputFileName}_verifier.csv`);
     
     console.log(`[SERVICE] Fichier de sortie: ${outputFilePath}`);
@@ -449,15 +309,8 @@ async function processCsvFile(inputFilePath) {
       console.log(`[SERVICE] Fichier de sortie vide créé avec l'en-tête: ${outputFilePath}`);
     }
     
-    // Mettre à jour le fichier files-registry.json avec les statistiques
-    const totalTime = Math.floor((Date.now() - startTime) / 1000);
-    await updateFilesRegistry(outputFilePath, validRows.length, dataRows.length, totalTime);
-    
-    // Mettre à jour le registre du fichier d'entrée pour indiquer qu'il a été traité par MillionVerifier
-    await updateInputFileRegistry(inputFileName + path.extname(inputFilePath), totalTime, "verifier");
-    
-    // Remettre le traitement à vide une fois terminé
-    await updateInputFileRegistry(inputFileName + path.extname(inputFilePath), totalTime, "");
+    // Les statistiques sont maintenant gérées par le StatisticsService centralisé
+    // Plus besoin de mettre à jour le registre ici
     
     // Supprimer le fichier d'entrée après traitement réussi (remplacement)
     try {
@@ -565,7 +418,5 @@ module.exports = {
   processFile,
   verifySingleEmail,
   initializeService,
-  updateApiKeys,
-  updateFilesRegistry,
-  updateInputFileRegistry
+  updateApiKeys
 }; 

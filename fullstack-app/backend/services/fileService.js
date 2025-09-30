@@ -169,6 +169,201 @@ class FileService {
         return this.updateFileInfo(filename, { category });
     }
 
+    // Archiver un fichier (supprime le fichier physique mais garde les métadonnées)
+    archiveFile(filename) {
+        try {
+            const registry = this.loadFilesRegistry();
+            
+            if (!registry[filename]) {
+                console.warn(`⚠️ Fichier ${filename} non trouvé dans le registre`);
+                return false;
+            }
+            
+            // Chercher le fichier dans les différents dossiers
+            const dataPath = path.join(this.dataDir, filename);
+            const outputPath = path.join(this.outputDir, filename);
+            const inputPath = path.join(this.inputDir, filename);
+            
+            let fileArchived = false;
+            
+            // Supprimer le fichier physique s'il existe
+            if (fs.existsSync(dataPath)) {
+                fs.unlinkSync(dataPath);
+                fileArchived = true;
+                console.log(`🗃️ Fichier archivé (supprimé): ${dataPath}`);
+            }
+            
+            if (fs.existsSync(outputPath)) {
+                fs.unlinkSync(outputPath);
+                fileArchived = true;
+                console.log(`🗃️ Fichier archivé (supprimé): ${outputPath}`);
+            }
+            
+            if (fs.existsSync(inputPath)) {
+                fs.unlinkSync(inputPath);
+                fileArchived = true;
+                console.log(`🗃️ Fichier archivé (supprimé): ${inputPath}`);
+            }
+            
+            if (fileArchived) {
+                // Marquer le fichier comme archivé dans le registre
+                registry[filename].archived = true;
+                registry[filename].archivedAt = new Date().toISOString();
+                registry[filename].lastUpdated = new Date().toISOString();
+                
+                this.saveFilesRegistry(registry);
+                console.log(`✅ Fichier ${filename} archivé avec succès (métadonnées conservées)`);
+                return true;
+            } else {
+                // Même si le fichier n'existe pas physiquement, marquer comme archivé
+                registry[filename].archived = true;
+                registry[filename].archivedAt = new Date().toISOString();
+                registry[filename].lastUpdated = new Date().toISOString();
+                
+                this.saveFilesRegistry(registry);
+                console.log(`✅ Fichier ${filename} marqué comme archivé (déjà supprimé physiquement)`);
+                return true;
+            }
+            
+        } catch (error) {
+            console.error(`❌ Erreur lors de l'archivage de ${filename}:`, error.message);
+            return false;
+        }
+    }
+
+    // Restaurer un fichier archivé (remet le fichier physique)
+    restoreFile(filename) {
+        try {
+            const registry = this.loadFilesRegistry();
+            
+            if (!registry[filename]) {
+                console.warn(`⚠️ Fichier ${filename} non trouvé dans le registre`);
+                return false;
+            }
+            
+            if (!registry[filename].archived) {
+                console.warn(`⚠️ Fichier ${filename} n'est pas archivé`);
+                return false;
+            }
+            
+            // Marquer le fichier comme non archivé
+            registry[filename].archived = false;
+            delete registry[filename].archivedAt;
+            registry[filename].lastUpdated = new Date().toISOString();
+            
+            this.saveFilesRegistry(registry);
+            console.log(`✅ Fichier ${filename} marqué comme restauré (vous devez re-uploader le fichier)`);
+            return true;
+            
+        } catch (error) {
+            console.error(`❌ Erreur lors de la restauration de ${filename}:`, error.message);
+            return false;
+        }
+    }
+
+    // Obtenir les fichiers archivés
+    getArchivedFiles() {
+        try {
+            const registry = this.loadFilesRegistry();
+            const archivedFiles = [];
+            
+            Object.entries(registry).forEach(([filename, fileInfo]) => {
+                if (fileInfo.archived) {
+                    archivedFiles.push({
+                        filename,
+                        ...fileInfo
+                    });
+                }
+            });
+            
+            return archivedFiles;
+        } catch (error) {
+            console.error('❌ Erreur lors de la récupération des fichiers archivés:', error.message);
+            return [];
+        }
+    }
+
+    // Méthode pour obtenir tous les fichiers depuis le registre (actifs + archivés)
+    getAllFilesFromRegistry() {
+        try {
+            const registry = this.loadFilesRegistry();
+            const allFiles = [];
+            
+            for (const [filename, metadata] of Object.entries(registry)) {
+                const isArchived = metadata.archived || false;
+                
+                allFiles.push({
+                    name: filename,
+                    size: metadata.size || 0,
+                    modified: metadata.modified || new Date().toISOString(),
+                    type: metadata.type || 'unknown',
+                    totalLines: metadata.totalLines || 0,
+                    category: metadata.category || 'unknown',
+                    fileType: metadata.type,
+                    isOpendata: metadata.isOpendata || false,
+                    isDaily: metadata.isDaily || false,
+                    isDomains: metadata.isDomains || false,
+                    isValides: metadata.isValides || false,
+                    isWhois: metadata.isWhois || false,
+                    isDateFiltered: metadata.isDateFiltered || false,
+                    archived: isArchived,
+                    archivedAt: metadata.archivedAt,
+                    lastUpdated: metadata.lastUpdated,
+                    dates: metadata.dates || [],
+                    localisations: metadata.localisations || [],
+                    mergedFrom: metadata.mergedFrom || [],
+                    totalRows: metadata.totalRows || 0,
+                    validRows: metadata.validRows || 0,
+                    invalidRows: metadata.invalidRows || 0,
+                    statistiques: metadata.statistiques || {}
+                });
+            }
+            
+            return allFiles;
+        } catch (error) {
+            console.error('❌ Erreur lors de la récupération des fichiers depuis le registre:', error.message);
+            return [];
+        }
+    }
+
+    // Supprimer définitivement un fichier (supprime le fichier ET les métadonnées)
+    permanentlyDeleteFile(filename) {
+        try {
+            const registry = this.loadFilesRegistry();
+            
+            if (!registry[filename]) {
+                console.warn(`⚠️ Fichier ${filename} non trouvé dans le registre`);
+                return false;
+            }
+            
+            // Supprimer le fichier physique s'il existe encore
+            const dataPath = path.join(this.dataDir, filename);
+            const outputPath = path.join(this.outputDir, filename);
+            const inputPath = path.join(this.inputDir, filename);
+            
+            if (fs.existsSync(dataPath)) {
+                fs.unlinkSync(dataPath);
+            }
+            if (fs.existsSync(outputPath)) {
+                fs.unlinkSync(outputPath);
+            }
+            if (fs.existsSync(inputPath)) {
+                fs.unlinkSync(inputPath);
+            }
+            
+            // Supprimer les métadonnées du registre
+            delete registry[filename];
+            this.saveFilesRegistry(registry);
+            
+            console.log(`🗑️ Fichier ${filename} supprimé définitivement`);
+            return true;
+            
+        } catch (error) {
+            console.error(`❌ Erreur lors de la suppression définitive de ${filename}:`, error.message);
+            return false;
+        }
+    }
+
     // Obtenir les fichiers par catégorie
     getFilesByCategory(category) {
         const registry = this.loadFilesRegistry();
@@ -268,12 +463,16 @@ class FileService {
             }
         });
         
-        // Supprimer les fichiers qui n'existent plus
+        // Supprimer les fichiers qui n'existent plus (sauf s'ils sont archivés)
         Object.keys(registry).forEach(filename => {
             const filePath = path.join(this.dataDir, filename);
-            if (!fs.existsSync(filePath)) {
+            const fileInfo = registry[filename];
+            
+            // Ne pas supprimer les fichiers archivés même s'ils n'existent plus physiquement
+            if (!fs.existsSync(filePath) && !fileInfo.archived) {
                 delete registry[filename];
                 updated = true;
+                console.log(`🗑️ Fichier ${filename} supprimé du registre (n'existe plus physiquement)`);
             }
         });
         

@@ -267,6 +267,7 @@ const MergeService = require('./services/mergeService');
 const UpdateDatesService = require('./services/updateDatesService');
 const ImportService = require('./services/importService');
 const millionVerifierService = require('./services/millionVerifierService');
+const StatisticsService = require('./services/statisticsService');
 
 // Instanciation des services
 const opendataService = new OpendataService();
@@ -277,6 +278,7 @@ const personalizedMessageService = new PersonalizedMessageService();
 const mergeService = new MergeService(path.join(__dirname, 'data'));
 const updateDatesService = new UpdateDatesService(path.join(__dirname, 'data'));
 const importService = new ImportService(path.join(__dirname, 'data'));
+const statisticsService = new StatisticsService();
 
 const PORT = process.env.PORT || 3001;
 
@@ -523,6 +525,44 @@ app.get('/api/stats/detailed', requireAuth, (req, res) => {
   }
 });
 
+// Route pour obtenir les statistiques centralisées de la chaîne de traitement
+app.get('/api/stats/centralized', requireAuth, (req, res) => {
+  try {
+    const summary = statisticsService.getAllStatsSummary();
+    res.json({ 
+      success: true, 
+      summary 
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des statistiques centralisées:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Route pour obtenir les statistiques d'un fichier spécifique
+app.get('/api/stats/file/:filename', requireAuth, (req, res) => {
+  try {
+    const { filename } = req.params;
+    const stats = statisticsService.getFileStats(filename);
+    res.json({ 
+      success: true, 
+      filename,
+      stats 
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des statistiques du fichier:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // Route pour obtenir les dates disponibles pour les fichiers quotidiens
 app.get('/api/daily/dates', requireAuth, (req, res) => {
   try {
@@ -738,86 +778,66 @@ app.post('/api/files/import', requireAuth, upload.single('file'), async (req, re
   }
 });
 
-// Route pour supprimer plusieurs fichiers
+// Route pour supprimer plusieurs fichiers (avec option d'archivage)
 app.post('/api/files/delete', requireAuth, async (req, res) => {
   try {
-    const { files } = req.body;
+    const { files, archive = false } = req.body;
     
     if (!files || !Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ error: 'Liste de fichiers requise' });
     }
     
-    console.log(`🗑️ Suppression de ${files.length} fichier(s): ${files.join(', ')}`);
+    const action = archive ? 'archivage' : 'suppression';
+    console.log(`🗑️ ${action} de ${files.length} fichier(s): ${files.join(', ')}`);
     
-    const deletedFiles = [];
+    const processedFiles = [];
     const errors = [];
     
     for (const filename of files) {
       try {
-        console.log(`🔍 Recherche du fichier: ${filename}`);
+        console.log(`🔍 Traitement du fichier: ${filename}`);
         
-        // Chercher le fichier dans les différents dossiers
-        const dataPath = path.join(fileService.dataDir, filename);
-        const outputPath = path.join(fileService.outputDir, filename);
-        const inputPath = path.join(fileService.inputDir, filename);
-        
-        console.log(`📁 Chemins de recherche:`);
-        console.log(`   - Data: ${dataPath}`);
-        console.log(`   - Output: ${outputPath}`);
-        console.log(`   - Input: ${inputPath}`);
-        
-        let fileDeleted = false;
-        
-        if (fs.existsSync(dataPath)) {
-          console.log(`✅ Fichier trouvé dans data: ${dataPath}`);
-          fs.unlinkSync(dataPath);
-          fileDeleted = true;
-          console.log(`🗑️ Fichier supprimé: ${dataPath}`);
-        }
-        
-        if (fs.existsSync(outputPath)) {
-          console.log(`✅ Fichier trouvé dans output: ${outputPath}`);
-          fs.unlinkSync(outputPath);
-          fileDeleted = true;
-          console.log(`🗑️ Fichier supprimé: ${outputPath}`);
-        }
-        
-        if (fs.existsSync(inputPath)) {
-          console.log(`✅ Fichier trouvé dans input: ${inputPath}`);
-          fs.unlinkSync(inputPath);
-          fileDeleted = true;
-          console.log(`🗑️ Fichier supprimé: ${inputPath}`);
-        }
-        
-        if (fileDeleted) {
-          deletedFiles.push(filename);
-          console.log(`✅ ${filename} supprimé avec succès`);
+        if (archive) {
+          // Archiver le fichier (supprime le fichier physique mais garde les métadonnées)
+          const success = fileService.archiveFile(filename);
+          if (success) {
+            processedFiles.push({ filename, action: 'archived' });
+            console.log(`✅ ${filename} archivé avec succès`);
+          } else {
+            errors.push(`Erreur lors de l'archivage de ${filename}`);
+          }
         } else {
-          const errorMsg = `Fichier non trouvé: ${filename}`;
-          console.warn(`⚠️ ${errorMsg}`);
-          errors.push(errorMsg);
+          // Suppression définitive (supprime le fichier ET les métadonnées)
+          const success = fileService.permanentlyDeleteFile(filename);
+          if (success) {
+            processedFiles.push({ filename, action: 'deleted' });
+            console.log(`✅ ${filename} supprimé définitivement`);
+          } else {
+            errors.push(`Erreur lors de la suppression de ${filename}`);
+          }
         }
         
       } catch (error) {
-        const errorMsg = `Erreur lors de la suppression de ${filename}: ${error.message}`;
+        const errorMsg = `Erreur lors du traitement de ${filename}: ${error.message}`;
         console.error(`❌ ${errorMsg}`);
         errors.push(errorMsg);
       }
     }
     
-    console.log(`📊 Résumé de la suppression:`);
-    console.log(`   - Fichiers supprimés: ${deletedFiles.length}`);
+    console.log(`📊 Résumé du ${action}:`);
+    console.log(`   - Fichiers traités: ${processedFiles.length}`);
     console.log(`   - Erreurs: ${errors.length}`);
     
     res.json({ 
       success: true, 
-      message: `${deletedFiles.length} fichier(s) supprimé(s) avec succès`,
-      deletedFiles,
-      errors: errors.length > 0 ? errors : undefined
+      message: `${processedFiles.length} fichier(s) ${archive ? 'archivé(s)' : 'supprimé(s)'} avec succès`,
+      processedFiles,
+      errors: errors.length > 0 ? errors : undefined,
+      action: archive ? 'archive' : 'delete'
     });
     
   } catch (error) {
-    console.error('❌ Erreur lors de la suppression des fichiers:', error.message);
+    console.error('❌ Erreur lors du traitement des fichiers:', error.message);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -989,6 +1009,208 @@ app.get('/api/categories/:category', requireAuth, (req, res) => {
     
   } catch (error) {
     console.error('❌ Erreur lors de la récupération des fichiers par catégorie:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Route pour archiver des fichiers
+app.post('/api/files/archive', requireAuth, async (req, res) => {
+  try {
+    const { files } = req.body;
+    
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ error: 'Liste de fichiers requise' });
+    }
+    
+    console.log(`🗃️ Archivage de ${files.length} fichier(s): ${files.join(', ')}`);
+    
+    const archivedFiles = [];
+    const errors = [];
+    
+    for (const filename of files) {
+      try {
+        const success = fileService.archiveFile(filename);
+        if (success) {
+          archivedFiles.push(filename);
+          console.log(`✅ ${filename} archivé avec succès`);
+        } else {
+          errors.push(`Erreur lors de l'archivage de ${filename}`);
+        }
+      } catch (error) {
+        const errorMsg = `Erreur lors de l'archivage de ${filename}: ${error.message}`;
+        console.error(`❌ ${errorMsg}`);
+        errors.push(errorMsg);
+      }
+    }
+    
+    console.log(`📊 Résumé de l'archivage:`);
+    console.log(`   - Fichiers archivés: ${archivedFiles.length}`);
+    console.log(`   - Erreurs: ${errors.length}`);
+    
+    res.json({ 
+      success: true, 
+      message: `${archivedFiles.length} fichier(s) archivé(s) avec succès`,
+      archivedFiles,
+      errors: errors.length > 0 ? errors : undefined
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'archivage des fichiers:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Route pour obtenir les fichiers archivés
+app.get('/api/files/archived', requireAuth, (req, res) => {
+  try {
+    const archivedFiles = fileService.getArchivedFiles();
+    res.json({ 
+      success: true, 
+      archivedFiles,
+      count: archivedFiles.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des fichiers archivés:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Route pour obtenir tous les fichiers depuis le registre (actifs + archivés)
+app.get('/api/files/all', requireAuth, (req, res) => {
+  try {
+    // Utiliser le registre comme source principale
+    const allFiles = fileService.getAllFilesFromRegistry();
+    
+    // Séparer les fichiers actifs et archivés
+    const activeFiles = allFiles.filter(file => !file.archived);
+    const archivedFiles = allFiles.filter(file => file.archived);
+    
+    res.json({
+      success: true,
+      all: allFiles,
+      active: activeFiles,
+      archived: archivedFiles,
+      count: {
+        total: allFiles.length,
+        active: activeFiles.length,
+        archived: archivedFiles.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des fichiers depuis le registre:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Route pour restaurer un fichier archivé
+app.post('/api/files/restore', requireAuth, async (req, res) => {
+  try {
+    const { files } = req.body;
+    
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ error: 'Liste de fichiers requise' });
+    }
+    
+    console.log(`🔄 Restauration de ${files.length} fichier(s): ${files.join(', ')}`);
+    
+    const restoredFiles = [];
+    const errors = [];
+    
+    for (const filename of files) {
+      try {
+        const success = fileService.restoreFile(filename);
+        if (success) {
+          restoredFiles.push(filename);
+          console.log(`✅ ${filename} marqué comme restauré`);
+        } else {
+          errors.push(`Erreur lors de la restauration de ${filename}`);
+        }
+      } catch (error) {
+        const errorMsg = `Erreur lors de la restauration de ${filename}: ${error.message}`;
+        console.error(`❌ ${errorMsg}`);
+        errors.push(errorMsg);
+      }
+    }
+    
+    console.log(`📊 Résumé de la restauration:`);
+    console.log(`   - Fichiers restaurés: ${restoredFiles.length}`);
+    console.log(`   - Erreurs: ${errors.length}`);
+    
+    res.json({ 
+      success: true, 
+      message: `${restoredFiles.length} fichier(s) marqué(s) comme restauré(s)`,
+      restoredFiles,
+      errors: errors.length > 0 ? errors : undefined,
+      note: 'Les fichiers sont marqués comme restaurés. Vous devez re-uploader les fichiers CSV pour les rendre disponibles.'
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la restauration des fichiers:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Route pour supprimer définitivement des fichiers (supprime fichier ET métadonnées)
+app.post('/api/files/permanent-delete', requireAuth, async (req, res) => {
+  try {
+    const { files } = req.body;
+    
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ error: 'Liste de fichiers requise' });
+    }
+    
+    console.log(`🗑️ Suppression définitive de ${files.length} fichier(s): ${files.join(', ')}`);
+    
+    const deletedFiles = [];
+    const errors = [];
+    
+    for (const filename of files) {
+      try {
+        const success = fileService.permanentlyDeleteFile(filename);
+        if (success) {
+          deletedFiles.push(filename);
+          console.log(`✅ ${filename} supprimé définitivement`);
+        } else {
+          errors.push(`Erreur lors de la suppression définitive de ${filename}`);
+        }
+      } catch (error) {
+        const errorMsg = `Erreur lors de la suppression définitive de ${filename}: ${error.message}`;
+        console.error(`❌ ${errorMsg}`);
+        errors.push(errorMsg);
+      }
+    }
+    
+    console.log(`📊 Résumé de la suppression définitive:`);
+    console.log(`   - Fichiers supprimés: ${deletedFiles.length}`);
+    console.log(`   - Erreurs: ${errors.length}`);
+    
+    res.json({ 
+      success: true, 
+      message: `${deletedFiles.length} fichier(s) supprimé(s) définitivement`,
+      deletedFiles,
+      errors: errors.length > 0 ? errors : undefined,
+      warning: 'Cette action est irréversible. Les fichiers et leurs métadonnées ont été supprimés.'
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la suppression définitive des fichiers:', error.message);
     res.status(500).json({ 
       success: false, 
       error: error.message 

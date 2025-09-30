@@ -34,28 +34,7 @@ Ce système vous permet de :
 
 ---
 
-### 🌐 **Composant 2 : Traitement des Domaines Valides**
-*Dossier : `Traitement_Domaines_Valides/`*
-
-**À quoi ça sert pour l'EMAILING et PHONING :**
-- Extrait des listes de domaines .fr actifs depuis l'Opendata Afnic
-- Filtre par date de création, localisation, type d'entreprise
-- Extrait les contacts (emails + téléphones) via WHOIS et scraping
-- Crée des bases de données qualifiées pour vos campagnes
-
-**Fonctionnalités principales :**
-- ✅ Téléchargement automatique de l'Opendata Afnic (10M+ domaines)
-- ✅ Filtrage intelligent des domaines actifs
-- ✅ Extraction de contacts via WHOIS et scraping web
-- ✅ Filtrage par période de création (domaines récents = prospects chauds)
-
-**Cas d'usage marketing :**
-- **Emailing :** "Votre domaine a été créé il y a 3 mois, avez-vous pensé à l'optimisation SEO ?"
-- **Phoning :** "Bonjour, je vois que vous avez créé votre site récemment, nous pouvons vous aider..."
-
----
-
-### 🚀 **Composant 3 : Application Fullstack avec Interface Graphique**
+### 🚀 **Composant 2 : Application Fullstack avec Interface Graphique**
 *Dossier : `fullstack-app/`*
 
 **À quoi ça sert pour l'EMAILING et PHONING :**

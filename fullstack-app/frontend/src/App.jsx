@@ -47,6 +47,43 @@ function App() {
   const [dailyForm, setDailyForm] = useState({ mode: 'last7days', days: 1 });
   const [dailyDomainsForm, setDailyDomainsForm] = useState({ mode: 'yesterday', days: 1 });
   
+  // Fonctions utilitaires
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const formatTime = (seconds) => {
+    if (!seconds || seconds === 0) return '0s';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    
+    let result = '';
+    
+    if (hours > 0) {
+      result += `${hours}h `;
+    }
+    
+    if (minutes > 0) {
+      result += `${minutes}m `;
+    }
+    
+    if (remainingSeconds > 0 || result === '') {
+      result += `${remainingSeconds}s`;
+    }
+    
+    return result.trim();
+  };
+  
   // États pour les nouveaux filtres
   const [dateFilterForm, setDateFilterForm] = useState({ startDate: '', endDate: '' });
   const [locationFilterForm, setLocationFilterForm] = useState({ type: 'ville', value: '' });
@@ -59,6 +96,9 @@ function App() {
 
   // États pour la sélection multiple
   const [selectedFiles, setSelectedFiles] = useState(new Set());
+  
+  // États pour la modal d'action sur les fichiers
+  const [showFileActionModal, setShowFileActionModal] = useState(false);
 
   // Ajout d'un état pour la suppression (nom du fichier à supprimer)
   const [fileToDelete, setFileToDelete] = useState(null);
@@ -283,25 +323,24 @@ function App() {
 
   const fetchFiles = async () => {
     try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/list`);
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/all`);
       const data = await response.json();
-      // Fusionner sans doublons (par nom de fichier)
-      const allFiles = [...data.data, ...data.output];
-      const uniqueFiles = allFiles.filter(
-        (file, index, self) =>
-          index === self.findIndex(f => f.name === file.name)
-      );
       
-      // Les fichiers contiennent déjà totalLines depuis le registre
-      setFiles(uniqueFiles);
-      
-      // Réinitialiser l'affichage des fichiers quand de nouveaux fichiers sont chargés
-      setFilesToShow(9);
-      
-      // Pré-remplir les métadonnées avec les données du registre
-      const initialMetadata = {};
-      uniqueFiles.forEach(file => {
-        if (file.totalLines !== undefined) {
+      if (data.success) {
+        // Utiliser tous les fichiers depuis le registre (actifs + archivés)
+        const allFiles = data.all || [];
+        
+        console.log(`📁 Fichiers chargés depuis le registre: ${allFiles.length} total (${data.count?.active || 0} actifs, ${data.count?.archived || 0} archivés)`);
+        
+        // Les fichiers contiennent déjà toutes les métadonnées depuis le registre
+        setFiles(allFiles);
+        
+        // Réinitialiser l'affichage des fichiers quand de nouveaux fichiers sont chargés
+        setFilesToShow(9);
+        
+        // Pré-remplir les métadonnées avec les données du registre
+        const initialMetadata = {};
+        allFiles.forEach(file => {
           initialMetadata[file.name] = {
             totalLines: file.totalLines,
             category: file.category,
@@ -311,11 +350,23 @@ function App() {
             isDomains: file.isDomains,
             isValides: file.isValides,
             isWhois: file.isWhois,
-            isDateFiltered: file.isDateFiltered
+            isDateFiltered: file.isDateFiltered,
+            archived: file.archived || false,
+            archivedAt: file.archivedAt,
+            lastUpdated: file.lastUpdated,
+            dates: file.dates,
+            localisations: file.localisations,
+            mergedFrom: file.mergedFrom,
+            totalRows: file.totalRows,
+            validRows: file.validRows,
+            invalidRows: file.invalidRows,
+            statistiques: file.statistiques
           };
-        }
-      });
-      setFileMetadata(prev => ({ ...prev, ...initialMetadata }));
+        });
+        setFileMetadata(prev => ({ ...prev, ...initialMetadata }));
+      } else {
+        console.error('❌ Erreur API:', data.error);
+      }
       
     } catch (error) {
       console.error('Erreur lors du chargement des fichiers:', error);
@@ -1192,21 +1243,38 @@ function App() {
 
   // Calcul des fichiers à afficher (plus utilisé, supprimé)
 
-  const handleDeleteSelected = async () => {
+  // Fonction pour gérer l'action sélectionnée sur les fichiers
+  const handleFileAction = async (action) => {
     if (selectedFiles.size === 0) return;
     
     setLoading(true);
+    setShowFileActionModal(false);
+    
     try {
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/delete`, {
+      let endpoint = '/api/files/archive';
+      let body = { files: Array.from(selectedFiles) };
+      
+      if (action === 'permanent-delete') {
+        endpoint = '/api/files/permanent-delete';
+      }
+      
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: Array.from(selectedFiles) })
+        body: JSON.stringify(body)
       });
       
       const data = await response.json();
       
       if (data.success) {
-        showMessage('success', `${selectedFiles.size} fichier(s) supprimé(s) avec succès !`);
+        let message = '';
+        if (action === 'archive') {
+          message = `${selectedFiles.size} fichier(s) archivé(s) avec succès ! (statistiques conservées)`;
+        } else if (action === 'permanent-delete') {
+          message = `${selectedFiles.size} fichier(s) supprimé(s) définitivement !`;
+        }
+        
+        showMessage('success', message);
         setSelectedFiles(new Set());
         fetchStats();
         fetchFiles();
@@ -1218,6 +1286,52 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Fonction pour gérer l'action sur un fichier individuel
+  const handleSingleFileAction = async (file, action) => {
+    setLoading(true);
+    
+    try {
+      let endpoint = '/api/files/archive';
+      let body = { files: [file.name] };
+      
+      if (action === 'permanent-delete') {
+        endpoint = '/api/files/permanent-delete';
+      }
+      
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        let message = '';
+        if (action === 'archive') {
+          message = `Fichier "${file.name}" archivé avec succès ! (statistiques conservées)`;
+        } else if (action === 'permanent-delete') {
+          message = `Fichier "${file.name}" supprimé définitivement !`;
+        }
+        
+        showMessage('success', message);
+        fetchStats();
+        fetchFiles();
+      } else {
+        showMessage('error', `Erreur: ${data.error}`);
+      }
+    } catch (error) {
+      showMessage('error', 'Erreur de connexion au serveur');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedFiles.size === 0) return;
+    setShowFileActionModal(true);
   };
 
   const handleMergeSelected = async () => {
@@ -1294,7 +1408,20 @@ function App() {
     setDeleteLoading(true);
     try {
       console.log('Suppression en cours pour', fileToDelete.name);
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/delete`, {
+      
+      // Déterminer si le fichier est archivé
+      const isArchived = fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived;
+      
+      let endpoint = '/api/files/permanent-delete';
+      let message = 'Fichier supprimé définitivement avec succès !';
+      
+      if (!isArchived) {
+        // Pour les fichiers non archivés, proposer l'archivage
+        endpoint = '/api/files/archive';
+        message = 'Fichier archivé avec succès ! (statistiques conservées)';
+      }
+      
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: [fileToDelete.name] })
@@ -1302,7 +1429,7 @@ function App() {
       const data = await response.json();
       console.log('Réponse API:', data);
       if (data.success) {
-        showMessage('success', `Fichier supprimé avec succès !`);
+        showMessage('success', message);
         fetchStats();
         fetchFiles();
       } else {
@@ -2139,11 +2266,12 @@ function App() {
                   const isSelected = selectedFiles.has(file.name);
                   const whoisJob = whoisJobs[file.name];
                   const isWhoisTerminal = whoisJob && (whoisJob.inProgress || (whoisJob.logs && whoisJob.logs.length > 0));
+                  const isArchived = file.archived || fileMetadata[file.name]?.archived;
                   
                   return (
                     <div 
                       key={index}
-                      className={`glass-card glass-card-hover p-6 rounded-2xl bg-gradient-to-br ${getFileTypeColor(file)} animate-fade-in relative transition-all duration-200 ${isSelected ? 'ring-2 ring-accent-400 ring-offset-2 ring-offset-dark-600' : ''}`}
+                      className={`glass-card glass-card-hover p-6 rounded-2xl bg-gradient-to-br ${isArchived ? 'from-neutral-600 to-neutral-700 border-neutral-500' : getFileTypeColor(file)} animate-fade-in relative transition-all duration-200 ${isSelected ? 'ring-2 ring-accent-400 ring-offset-2 ring-offset-dark-600' : ''} ${isArchived ? 'opacity-75' : ''}`}
                       style={{animationDelay: `${index * 0.1}s`}}
                     >
                       {/* Affichage du statut de traitement WHOIS, MillionVerifier ou Déduplication */}
@@ -2183,17 +2311,23 @@ function App() {
                               <IconComponent className="h-8 w-8 text-white" />
                             </div>
                             <div className="ml-4 flex-1 min-w-0">
-                              <h3
-                                className="text-lg font-semibold text-white truncate block w-full"
-                                title={file.name}
-                              >
-                                {file.name}
-                              </h3>
+                              <div className="flex items-center gap-2">
+                                <h3
+                                  className="text-lg font-semibold text-white truncate block w-full"
+                                  title={file.name}
+                                >
+                                  {file.name}
+                                </h3>
+                                {isArchived && (
+                                  <span className="bg-neutral-600 text-neutral-200 text-xs px-2 py-1 rounded-full font-medium">
+                                    ARCHIVÉ
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2">
                                 <p className="text-neutral-200 text-sm">
                                   {getFileTypeName(file)}
                                 </p>
-
                               </div>
                             </div>
                           </div>
@@ -2202,6 +2336,12 @@ function App() {
                               <span className="text-neutral-200">Taille</span>
                               <span className="font-medium text-white">{formatFileSize(file.size)}</span>
                             </div>
+                            {isArchived && (
+                              <div className="flex justify-between text-sm mb-2">
+                                <span className="text-neutral-200">Statut</span>
+                                <span className="font-medium text-orange-400">Archivé</span>
+                              </div>
+                            )}
                             <div className="flex justify-between text-sm mb-2">
                               <span className="text-neutral-200">Modifié</span>
                               <span className="font-medium text-white">{new Date(file.modified).toLocaleDateString()}</span>
@@ -2265,105 +2405,129 @@ function App() {
                           {/* Actions des fichiers - masquées si le fichier est sélectionné */}
                           {!isSelected && (
                                           <div className="flex flex-wrap gap-1.5">
-                {/* Bouton Filtrer par date - seulement pour les fichiers AFNIC */}
-                {file.type === 'afnic' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setProcessFile(file); setSelectedAction('date-filter'); }}
-                    className={`flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white ${getButtonColor(file, 'date-filter')}`}
-                  >
-                    <ChartBarIcon className="h-3 w-3 mr-1" />
-                    Trier par date
-                  </button>
+                {isArchived ? (
+                  // Boutons limités pour les fichiers archivés
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSelectedFileForStats(file); setShowStatsModal(true); }}
+                      className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                    >
+                      <ChartBarIcon className="h-3 w-3 mr-1" />
+                      Statistiques
+                    </button>
+
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openDeleteModal(file); }}
+                      className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200"
+                    >
+                      <TrashIcon className="h-3 w-3 mr-1" />
+                      Supprimer définitivement
+                    </button>
+                  </>
+                ) : (
+                  // Boutons complets pour les fichiers actifs
+                  <>
+                    {/* Bouton Filtrer par date - seulement pour les fichiers AFNIC */}
+                    {file.type === 'afnic' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setProcessFile(file); setSelectedAction('date-filter'); }}
+                        className={`flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white ${getButtonColor(file, 'date-filter')}`}
+                      >
+                        <ChartBarIcon className="h-3 w-3 mr-1" />
+                        Trier par date
+                      </button>
+                    )}
+                    
+                    {/* Bouton WHOIS - seulement pour les fichiers domains */}
+                    {file.type === 'domains' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleWhoisAnalyze(file); }}
+                        className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-purple-600 hover:bg-purple-700"
+                      >
+                        <InformationCircleIcon className="h-3 w-3 mr-1" />
+                        WHOIS
+                      </button>
+                    )}
+
+                    {/* Bouton Déduplication - seulement pour les fichiers WHOIS */}
+                    {file.type === 'whois' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeduplication(file); }}
+                        className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-indigo-500 hover:bg-indigo-600"
+                      >
+                        <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Déduplication
+                      </button>
+                    )}
+
+                    {/* Bouton MillionVerifier - seulement pour les fichiers deduplicated */}
+                    {file.type === 'deduplicated' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleMillionVerifier(file); }}
+                        className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-yellow-500 hover:bg-yellow-600"
+                      >
+                        <SparklesIcon className="h-3 w-3 mr-1" />
+                        MillionVerifier
+                      </button>
+                    )}
+
+                    {/* Bouton Filtrer par localisation - pour les fichiers WHOIS et Verifier */}
+                    {(file.type === 'whois' || file.type === 'verifier') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setProcessFile(file); setSelectedAction('location-filter'); }}
+                        className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                      >
+                        <GlobeAltIcon className="h-3 w-3 mr-1" />
+                        Trier par loc
+                      </button>
+                    )}
+
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePreview(file); }}
+                      className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                    >
+                      <EyeIcon className="h-3 w-3 mr-1" />
+                      Aperçu
+                    </button>
+
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSelectedFileForStats(file); setShowStatsModal(true); }}
+                      className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                    >
+                      <ChartBarIcon className="h-3 w-3 mr-1" />
+                      Statistiques
+                    </button>
+
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleExport(file); }}
+                      className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
+                    >
+                      <DocumentArrowDownIcon className="h-3 w-3 mr-1" />
+                      Exporter
+                    </button>
+
+                    {/* Boutons Supprimer et Archiver pour tous les fichiers actifs */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleSingleFileAction(file, 'archive'); }}
+                      className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-blue-400 hover:bg-blue-500 hover:text-white"
+                    >
+                      <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"/>
+                      </svg>
+                      Archiver
+                    </button>
+
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openDeleteModal(file); }}
+                      className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-red-400 hover:bg-red-500 hover:text-white"
+                    >
+                      <TrashIcon className="h-3 w-3 mr-1" />
+                      Supprimer
+                    </button>
+                  </>
                 )}
-                
-                {/* Bouton WHOIS - seulement pour les fichiers domains */}
-                {file.type === 'domains' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleWhoisAnalyze(file); }}
-                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-purple-600 hover:bg-purple-700"
-                  >
-                    <InformationCircleIcon className="h-3 w-3 mr-1" />
-                    WHOIS
-                  </button>
-                )}
-
-                {/* Bouton Déduplication - seulement pour les fichiers WHOIS */}
-                {file.type === 'whois' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeduplication(file); }}
-                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-indigo-500 hover:bg-indigo-600"
-                  >
-                    <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Déduplication
-                  </button>
-                )}
-
-                {/* Bouton MillionVerifier - seulement pour les fichiers deduplicated */}
-                {file.type === 'deduplicated' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleMillionVerifier(file); }}
-                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-yellow-500 hover:bg-yellow-600"
-                  >
-                    <SparklesIcon className="h-3 w-3 mr-1" />
-                    MillionVerifier
-                  </button>
-                )}
-
-                {/* Bouton Filtrer par localisation - pour les fichiers WHOIS et Verifier */}
-                {(file.type === 'whois' || file.type === 'verifier') && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setProcessFile(file); setSelectedAction('location-filter'); }}
-                    className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
-                  >
-                    <GlobeAltIcon className="h-3 w-3 mr-1" />
-                    Trier par loc
-                  </button>
-                )}
-
-                {/* Bouton Messages personnalisés - seulement pour les fichiers WHOIS */}
-                {/* {file.type === 'whois' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handlePersonalizedMessages(file); }}
-                    className="flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-white bg-purple-600 hover:bg-purple-700"
-                  >
-                    <ChatBubbleLeftRightIcon className="h-3 w-3 mr-1" />
-                    Messages
-                  </button>
-                )} */}
-
-                <button
-                  onClick={(e) => { e.stopPropagation(); handlePreview(file); }}
-                  className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
-                >
-                  <EyeIcon className="h-3 w-3 mr-1" />
-                  Aperçu
-                </button>
-
-                <button
-                  onClick={(e) => { e.stopPropagation(); setSelectedFileForStats(file); setShowStatsModal(true); }}
-                  className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
-                >
-                  <ChartBarIcon className="h-3 w-3 mr-1" />
-                  Statistiques
-                </button>
-
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleExport(file); }}
-                  className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200"
-                >
-                  <DocumentArrowDownIcon className="h-3 w-3 mr-1" />
-                  Exporter
-                </button>
-
-                <button
-                  onClick={(e) => { e.stopPropagation(); openDeleteModal(file); }}
-                  className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200"
-                >
-                  <TrashIcon className="h-3 w-3 mr-1" />
-                  Supprimer
-                </button>
               </div>
                           )}
                         </>
@@ -2412,7 +2576,7 @@ function App() {
                               {/* SUPPRIMER le compteur ici */}
                               <span title="Temps écoulé" className="flex items-center gap-1 text-white">
                                 <span role="img" aria-label="timer" style={{ fontSize: '1.2em' }}>⏱️</span>
-                                <span className="font-bold">{elapsed}s</span>
+                                <span className="font-bold">{formatTime(elapsed)}</span>
                               </span>
                               <span title="Emails trouvés" className="flex items-center gap-1 text-sky-300">
                                 <span role="img" aria-label="email" style={{ fontSize: '1.2em' }}>📧</span>
@@ -2966,14 +3130,28 @@ function App() {
                 </svg>
               </button>
             </div>
-            <p className="text-neutral-300 mb-6">Êtes-vous sûr de vouloir supprimer <span className="text-white font-semibold">{fileToDelete.name}</span> ?</p>
+            <p className="text-neutral-300 mb-6">
+              {fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived ? (
+                <>Êtes-vous sûr de vouloir supprimer définitivement <span className="text-white font-semibold">{fileToDelete.name}</span> ?<br/><span className="text-red-400 text-sm">Cette action est irréversible et supprimera toutes les métadonnées.</span></>
+              ) : (
+                <>Êtes-vous sûr de vouloir archiver <span className="text-white font-semibold">{fileToDelete.name}</span> ?<br/><span className="text-blue-400 text-sm">Le fichier sera supprimé mais les statistiques seront conservées.</span></>
+              )}
+            </p>
             <div className="flex space-x-3">
               <button
                 onClick={confirmDelete}
                 disabled={deleteLoading}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                className={`flex-1 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
+                  fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived 
+                    ? 'bg-red-500 hover:bg-red-600 text-white' 
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
               >
-                {deleteLoading ? 'Suppression...' : 'Oui, supprimer'}
+                {deleteLoading ? (
+                  fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived ? 'Suppression...' : 'Archivage...'
+                ) : (
+                  fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived ? 'Oui, supprimer définitivement' : 'Oui, archiver'
+                )}
               </button>
               <button
                 onClick={() => setFileToDelete(null)}
@@ -3742,7 +3920,7 @@ function App() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">
-                      {selectedFileForStats.statistiques?.domain_temps || 0}s
+                      {formatTime(selectedFileForStats.statistiques?.domain_temps || 0)}
                     </div>
                     <div className="text-sm text-neutral-400">Temps de téléchargement</div>
                   </div>
@@ -3763,7 +3941,7 @@ function App() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">
-                      {selectedFileForStats.statistiques?.whois_temps || 0}s
+                      {formatTime(selectedFileForStats.statistiques?.whois_temps || 0)}
                     </div>
                     <div className="text-sm text-neutral-400">Temps de traitement</div>
                   </div>
@@ -3784,7 +3962,7 @@ function App() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">
-                      {selectedFileForStats.statistiques?.dedup_temps || 0}s
+                      {formatTime(selectedFileForStats.statistiques?.dedup_temps || 0)}
                     </div>
                     <div className="text-sm text-neutral-400">Temps de traitement</div>
                   </div>
@@ -3805,7 +3983,7 @@ function App() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">
-                      {selectedFileForStats.statistiques?.verifier_temps || 0}s
+                      {formatTime(selectedFileForStats.statistiques?.verifier_temps || 0)}
                     </div>
                     <div className="text-sm text-neutral-400">Temps de traitement</div>
                   </div>
@@ -3818,6 +3996,70 @@ function App() {
             </div>
 
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal d'action sur les fichiers */}
+      {showFileActionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-neutral-800 border border-neutral-600 p-6 rounded-xl max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Action sur {selectedFiles.size} fichier(s)
+            </h3>
+            
+            <div className="space-y-3">
+              <button
+                onClick={() => handleFileAction('archive')}
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-lg flex items-center gap-3 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"/>
+                </svg>
+                <div className="text-left">
+                  <div className="font-medium">Archiver</div>
+                  <div className="text-sm text-blue-100">Supprime le fichier mais garde les statistiques</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => handleFileAction('permanent-delete')}
+                className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg flex items-center gap-3 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
+                </svg>
+                <div className="text-left">
+                  <div className="font-medium">Supprimer définitivement</div>
+                  <div className="text-sm text-red-100">Supprime tout (fichier + métadonnées)</div>
+                </div>
+              </button>
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowFileActionModal(false)}
+                className="flex-1 bg-neutral-600 hover:bg-neutral-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message de confirmation */}
+      {message && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-md animate-slide-in-right ${
+          message.type === 'success' ? 'bg-green-500 text-white' :
+          message.type === 'error' ? 'bg-red-500 text-white' :
+          'bg-blue-500 text-white'
+        }`}>
+          <div className="flex items-center">
+            {message.type === 'success' && <CheckCircleIcon className="h-5 w-5 mr-2" />}
+            {message.type === 'error' && <ExclamationTriangleIcon className="h-5 w-5 mr-2" />}
+            {message.type === 'info' && <InformationCircleIcon className="h-5 w-5 mr-2" />}
+            <span>{message.text}</span>
           </div>
         </div>
       )}

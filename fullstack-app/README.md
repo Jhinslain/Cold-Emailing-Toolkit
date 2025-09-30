@@ -48,7 +48,7 @@
 ### Transfert du projet (méthode recommandée avec exclusions)
 ```bash
 # Créer une archive tar en excluant les node_modules et data spécifiques
-tar --exclude='fullstack-app/backend/node_modules' --exclude='fullstack-app/backend/data' --exclude='fullstack-app/frontend/node_modules' --exclude='fullstack-app/temp' --exclude='fullstack-app/.git' -czf fullstack-app-clean.tar.gz -C "C:\Users\levre\Majoli\Marketing\SCRIPTS EMAILING PHONING" fullstack-app
+tar --exclude='fullstack-app/backend/node_modules' --exclude='fullstack-app/backend/data' --exclude='fullstack-app/frontend/node_modules' --exclude='fullstack-app/temp' --exclude='fullstack-app/.git' -czf fullstack-app-clean.tar.gz -C "C:\Users\levre\Majoli\Marketing\PROJET DOMAIN APP" fullstack-app
 
 # Transférer l'archive
 scp -i "C:\Users\levre\Documents\domainMajoli.pem" fullstack-app-clean.tar.gz ubuntu@13.60.29.161:~/
@@ -62,11 +62,6 @@ ssh -i "C:\Users\levre\Documents\domainMajoli.pem" ubuntu@13.60.29.161 "cd ~ && 
 ssh -i "C:\Users\levre\Documents\domainMajoli.pem" ubuntu@13.60.29.161
 ```
 
-### Installation des dépendances (sur le serveur)
-```bash
-cd ~/fullstack-app/backend && npm install
-cd ~/fullstack-app/frontend && npm install
-```
 
 ### Docker Compose (build & lancement)
 ```bash
