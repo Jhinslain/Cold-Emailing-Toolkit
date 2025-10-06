@@ -142,7 +142,10 @@ class StatisticsService {
                     finalDomainStats = recoveredStats;
                 } else {
                     console.warn(`⚠️ Impossible de récupérer les statistiques de téléchargement pour ${sourceFileName}`);
+                    console.warn(`⚠️ Les statistiques de téléchargement seront marquées comme 0`);
                 }
+            } else {
+                console.log(`✅ Statistiques de téléchargement trouvées: ${finalDomainStats.domain_lignes} lignes, ${finalDomainStats.domain_temps}s`);
             }
             
             // Fusionner avec les nouvelles statistiques

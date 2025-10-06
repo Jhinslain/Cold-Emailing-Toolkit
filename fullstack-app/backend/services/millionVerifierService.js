@@ -151,13 +151,19 @@ async function processCsvFile(inputFilePath) {
   if (isProcessing) {
     console.warn(`[SERVICE] ⚠️ Un traitement est déjà en cours pour: ${currentProcessingFile}`);
     console.warn(`[SERVICE] Fichier demandé: ${inputFilePath}`);
-    throw new Error('Un traitement est déjà en cours');
-  }
-  
-  // Vérifier si le même fichier est déjà en cours de traitement
-  if (currentProcessingFile === inputFilePath) {
-    console.warn(`[SERVICE] ⚠️ Le fichier ${inputFilePath} est déjà en cours de traitement`);
-    throw new Error('Fichier déjà en cours de traitement');
+    
+    // Si c'est le même fichier, attendre un peu et réessayer
+    if (currentProcessingFile === inputFilePath) {
+      console.warn(`[SERVICE] Même fichier en cours de traitement, attente de 5 secondes...`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Vérifier à nouveau après l'attente
+      if (isProcessing && currentProcessingFile === inputFilePath) {
+        throw new Error('Fichier encore en cours de traitement après attente');
+      }
+    } else {
+      throw new Error('Un traitement est déjà en cours pour un autre fichier');
+    }
   }
   
   try {
@@ -335,6 +341,9 @@ async function processCsvFile(inputFilePath) {
      isProcessing = false;
      currentProcessingFile = null;
      console.log(`[SERVICE] 🔓 Verrou de traitement libéré pour: ${inputFilePath}`);
+     
+     // Log supplémentaire pour debug
+     console.log(`[SERVICE] 📊 État final: isProcessing=${isProcessing}, currentProcessingFile=${currentProcessingFile}`);
    }
  }
 
@@ -412,11 +421,23 @@ function initializeService() {
   }
 }
 
+// Fonction de diagnostic pour vérifier l'état du service
+function getServiceStatus() {
+  return {
+    isProcessing,
+    currentProcessingFile,
+    apiKeysCount: API_KEYS.length,
+    hasApiKeys: API_KEYS.length > 0,
+    serviceInitialized: true
+  };
+}
+
 module.exports = {
   verifyEmailsMillionVerifier,
   processCsvFile,
   processFile,
   verifySingleEmail,
   initializeService,
-  updateApiKeys
+  updateApiKeys,
+  getServiceStatus
 }; 

@@ -102,6 +102,7 @@ function App() {
 
   // Ajout d'un état pour la suppression (nom du fichier à supprimer)
   const [fileToDelete, setFileToDelete] = useState(null);
+  const [modalType, setModalType] = useState('delete'); // 'delete' ou 'archive'
   
   // État pour la confirmation d'arrêt de campagne
   const [campaignToStop, setCampaignToStop] = useState(null);
@@ -1251,11 +1252,13 @@ function App() {
     setShowFileActionModal(false);
     
     try {
-      let endpoint = '/api/files/archive';
+      let endpoint = '/api/files/permanent-delete';
       let body = { files: Array.from(selectedFiles) };
+      let message = `${selectedFiles.size} fichier(s) supprimé(s) définitivement !`;
       
-      if (action === 'permanent-delete') {
-        endpoint = '/api/files/permanent-delete';
+      if (action === 'archive') {
+        endpoint = '/api/files/archive';
+        message = `${selectedFiles.size} fichier(s) archivé(s) avec succès ! (statistiques conservées)`;
       }
       
       const response = await authFetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
@@ -1267,13 +1270,6 @@ function App() {
       const data = await response.json();
       
       if (data.success) {
-        let message = '';
-        if (action === 'archive') {
-          message = `${selectedFiles.size} fichier(s) archivé(s) avec succès ! (statistiques conservées)`;
-        } else if (action === 'permanent-delete') {
-          message = `${selectedFiles.size} fichier(s) supprimé(s) définitivement !`;
-        }
-        
         showMessage('success', message);
         setSelectedFiles(new Set());
         fetchStats();
@@ -1293,11 +1289,13 @@ function App() {
     setLoading(true);
     
     try {
-      let endpoint = '/api/files/archive';
+      let endpoint = '/api/files/permanent-delete';
       let body = { files: [file.name] };
+      let message = `Fichier "${file.name}" supprimé définitivement !`;
       
-      if (action === 'permanent-delete') {
-        endpoint = '/api/files/permanent-delete';
+      if (action === 'archive') {
+        endpoint = '/api/files/archive';
+        message = `Fichier "${file.name}" archivé avec succès ! (statistiques conservées)`;
       }
       
       const response = await authFetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
@@ -1309,13 +1307,6 @@ function App() {
       const data = await response.json();
       
       if (data.success) {
-        let message = '';
-        if (action === 'archive') {
-          message = `Fichier "${file.name}" archivé avec succès ! (statistiques conservées)`;
-        } else if (action === 'permanent-delete') {
-          message = `Fichier "${file.name}" supprimé définitivement !`;
-        }
-        
         showMessage('success', message);
         fetchStats();
         fetchFiles();
@@ -1400,6 +1391,13 @@ function App() {
   // Fonction pour ouvrir la modale de suppression
   const openDeleteModal = (file) => {
     setFileToDelete(file);
+    setModalType('delete');
+  };
+
+  // Fonction pour ouvrir la modale d'archivage
+  const openArchiveModal = (file) => {
+    setFileToDelete(file);
+    setModalType('archive');
   };
 
   // Fonction pour confirmer la suppression
@@ -1409,19 +1407,8 @@ function App() {
     try {
       console.log('Suppression en cours pour', fileToDelete.name);
       
-      // Déterminer si le fichier est archivé
-      const isArchived = fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived;
-      
-      let endpoint = '/api/files/permanent-delete';
-      let message = 'Fichier supprimé définitivement avec succès !';
-      
-      if (!isArchived) {
-        // Pour les fichiers non archivés, proposer l'archivage
-        endpoint = '/api/files/archive';
-        message = 'Fichier archivé avec succès ! (statistiques conservées)';
-      }
-      
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
+      // Le bouton "Supprimer" supprime toujours directement le fichier
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/permanent-delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: [fileToDelete.name] })
@@ -1429,7 +1416,38 @@ function App() {
       const data = await response.json();
       console.log('Réponse API:', data);
       if (data.success) {
-        showMessage('success', message);
+        showMessage('success', 'Fichier supprimé définitivement avec succès !');
+        fetchStats();
+        fetchFiles();
+      } else {
+        showMessage('error', `Erreur: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Erreur JS:', error);
+      showMessage('error', 'Erreur de connexion au serveur');
+    } finally {
+      console.log('On passe dans finally');
+      setDeleteLoading(false);
+      setFileToDelete(null);
+    }
+  };
+
+  // Fonction pour confirmer l'archivage
+  const confirmArchive = async () => {
+    if (!fileToDelete || deleteLoading) return;
+    setDeleteLoading(true);
+    try {
+      console.log('Archivage en cours pour', fileToDelete.name);
+      
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/api/files/archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [fileToDelete.name] })
+      });
+      const data = await response.json();
+      console.log('Réponse API:', data);
+      if (data.success) {
+        showMessage('success', 'Fichier archivé avec succès ! (statistiques conservées)');
         fetchStats();
         fetchFiles();
       } else {
@@ -2510,7 +2528,7 @@ function App() {
 
                     {/* Boutons Supprimer et Archiver pour tous les fichiers actifs */}
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleSingleFileAction(file, 'archive'); }}
+                      onClick={(e) => { e.stopPropagation(); openArchiveModal(file); }}
                       className="glass-button flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 text-blue-400 hover:bg-blue-500 hover:text-white"
                     >
                       <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -3131,7 +3149,7 @@ function App() {
               </button>
             </div>
             <p className="text-neutral-300 mb-6">
-              {fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived ? (
+              {modalType === 'delete' ? (
                 <>Êtes-vous sûr de vouloir supprimer définitivement <span className="text-white font-semibold">{fileToDelete.name}</span> ?<br/><span className="text-red-400 text-sm">Cette action est irréversible et supprimera toutes les métadonnées.</span></>
               ) : (
                 <>Êtes-vous sûr de vouloir archiver <span className="text-white font-semibold">{fileToDelete.name}</span> ?<br/><span className="text-blue-400 text-sm">Le fichier sera supprimé mais les statistiques seront conservées.</span></>
@@ -3139,18 +3157,18 @@ function App() {
             </p>
             <div className="flex space-x-3">
               <button
-                onClick={confirmDelete}
+                onClick={modalType === 'delete' ? confirmDelete : confirmArchive}
                 disabled={deleteLoading}
                 className={`flex-1 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
-                  fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived 
+                  modalType === 'delete' 
                     ? 'bg-red-500 hover:bg-red-600 text-white' 
                     : 'bg-blue-500 hover:bg-blue-600 text-white'
                 }`}
               >
                 {deleteLoading ? (
-                  fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived ? 'Suppression...' : 'Archivage...'
+                  modalType === 'delete' ? 'Suppression...' : 'Archivage...'
                 ) : (
-                  fileToDelete.archived || fileMetadata[fileToDelete.name]?.archived ? 'Oui, supprimer définitivement' : 'Oui, archiver'
+                  modalType === 'delete' ? 'Oui, supprimer définitivement' : 'Oui, archiver'
                 )}
               </button>
               <button

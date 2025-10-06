@@ -607,8 +607,12 @@ class WhoisService {
             }
             
             await this.fileService.updateFileLineCount(outputCsvName);
-            // Note: Ne pas supprimer l'ancien fichier du registre ici
-            // Le scheduler gérera le transfert de statistiques avec transferStats
+            
+            // IMPORTANT: Ne pas supprimer l'ancien fichier du registre ici !
+            // Le scheduler gérera le transfert des statistiques avec transferStats
+            // et supprimera l'ancienne entrée après le transfert
+            console.log(`📋 Ancien fichier ${inputCsvName} conservé dans le registre pour transfert des statistiques`);
+            
             sendLog('refresh', 'Actualisation de la liste des fichiers...');
             console.log('\n' + '🎉 TRAITEMENT TERMINÉ ' + '🎉'.repeat(10));
             displayStats();
@@ -669,7 +673,12 @@ class WhoisService {
             }
             
             await this.fileService.updateFileLineCount(outputCsvName);
-            await this.fileService.removeFileFromRegistry(inputCsvName);
+            
+            // IMPORTANT: Ne pas supprimer l'ancien fichier du registre ici !
+            // Le scheduler gérera le transfert des statistiques avec transferStats
+            // et supprimera l'ancienne entrée après le transfert
+            console.log(`📋 Ancien fichier ${inputCsvName} conservé dans le registre pour transfert des statistiques`);
+            
             await this.fileService.updateFileInfo(inputCsvName, { traitement: '' });
             return outputCsvName;
         } catch (error) {

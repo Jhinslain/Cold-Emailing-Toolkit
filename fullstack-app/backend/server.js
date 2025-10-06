@@ -1828,6 +1828,64 @@ app.post('/api/millionverifier/process-file', requireAuth, async (req, res) => {
   }
 });
 
+// Route pour diagnostiquer l'état du service MillionVerifier
+app.get('/api/millionverifier/status', requireAuth, (req, res) => {
+  try {
+    const status = millionVerifierService.getServiceStatus();
+    
+    // Ajouter des informations sur les variables d'environnement (sans exposer les clés)
+    const envInfo = {
+      hasApiKey1: !!process.env.API_MILLION_VERIFIER1,
+      hasApiKey2: !!process.env.API_MILLION_VERIFIER2,
+      hasApiKey3: !!process.env.API_MILLION_VERIFIER3,
+      totalConfiguredKeys: [process.env.API_MILLION_VERIFIER1, process.env.API_MILLION_VERIFIER2, process.env.API_MILLION_VERIFIER3].filter(key => key).length
+    };
+    
+    res.json({
+      success: true,
+      serviceStatus: status,
+      environmentInfo: envInfo,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error("[BACKEND] Erreur lors du diagnostic MillionVerifier:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Route pour diagnostiquer les statistiques d'un fichier spécifique
+app.get('/api/stats/diagnose/:filename', requireAuth, (req, res) => {
+  try {
+    const { filename } = req.params;
+    const StatisticsService = require('./services/statisticsService');
+    const statisticsService = new StatisticsService();
+    
+    // Obtenir les statistiques actuelles
+    const currentStats = statisticsService.getFileStats(filename);
+    
+    // Essayer de corriger les statistiques manquantes
+    const fixedStats = statisticsService.fixMissingDomainStats(filename);
+    
+    // Récupérer les statistiques de téléchargement
+    const recoveredStats = statisticsService.recoverDomainStats(filename);
+    
+    res.json({
+      success: true,
+      filename,
+      currentStats,
+      fixedStats,
+      recoveredStats,
+      hasDomainStats: (fixedStats.domain_lignes > 0 || fixedStats.domain_temps > 0),
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error("[BACKEND] Erreur lors du diagnostic des statistiques:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Routes des campagnes
 app.use('/api/campaigns', campaignRoutes);
 

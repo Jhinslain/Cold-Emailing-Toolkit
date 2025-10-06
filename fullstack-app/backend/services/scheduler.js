@@ -148,9 +148,17 @@ class SchedulerService {
             whoisLineCount = content.split('\n').filter(line => line.trim()).length - 1; // -1 pour l'en-tête
         }
         
+        // Vérifier et corriger les statistiques de téléchargement avant le transfert
+        console.log(`🔍 Vérification des statistiques de téléchargement pour ${yesterdayFile}...`);
+        const fixedStats = this.statisticsService.fixMissingDomainStats(yesterdayFile);
+        if (fixedStats.domain_lignes > 0) {
+            console.log(`✅ Statistiques de téléchargement corrigées: ${fixedStats.domain_lignes} lignes`);
+        }
+        
         // Transférer les statistiques du fichier source vers le fichier WHOIS
         // Le service WHOIS ne supprime plus l'ancien fichier du registre,
         // donc on peut utiliser transferStats pour préserver toutes les statistiques
+        console.log(`📊 Transfert des statistiques de ${yesterdayFile} vers ${whoisFileName}...`);
         this.statisticsService.transferStats(yesterdayFile, whoisFileName, {
             whois_lignes: whoisLineCount,
             whois_temps: whoisDuration
@@ -205,8 +213,33 @@ class SchedulerService {
                 console.log(`⏰ Heure de lancement Million Verifier: ${new Date().toISOString()}`);
                 
                 try {
+                    // Vérifier que le service MillionVerifier est correctement initialisé
+                    if (!this.millionVerifierService.initializeService || !this.millionVerifierService.processCsvFile) {
+                        console.error(`❌ Service MillionVerifier non initialisé correctement`);
+                        throw new Error('Service MillionVerifier non disponible');
+                    }
+                    
+                    // Vérifier que les clés API sont configurées
+                    const apiKeys = [
+                        process.env.API_MILLION_VERIFIER1,
+                        process.env.API_MILLION_VERIFIER2,
+                        process.env.API_MILLION_VERIFIER3
+                    ].filter(key => key);
+                    
+                    if (apiKeys.length === 0) {
+                        console.error(`❌ Aucune clé API MillionVerifier configurée`);
+                        console.error(`❌ Définissez les variables d'environnement API_MILLION_VERIFIER1, API_MILLION_VERIFIER2, API_MILLION_VERIFIER3`);
+                        throw new Error('Aucune clé API MillionVerifier configurée');
+                    }
+                    
+                    console.log(`✅ ${apiKeys.length} clé(s) API MillionVerifier configurée(s)`);
+                    
                     const mvStartTime = Date.now();
                     
+                    // Attendre un peu avant de lancer Million Verifier pour éviter les conflits
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    console.log(`🚀 [SCHEDULER] Appel du service MillionVerifier pour: ${whoisFilePath}`);
                     await this.millionVerifierService.processCsvFile(whoisFilePath);
                     
                     const mvEndTime = Date.now();
@@ -234,10 +267,17 @@ class SchedulerService {
                         traitement: 'verifier'
                     });
                     
+                    console.log(`🎉 PROCESSUS COMPLET TERMINÉ AVEC SUCCÈS !`);
+                    console.log(`📊 Fichier final créé: ${finalFileName} avec ${verifierLineCount} lignes`);
+                    
                 } catch (mvError) {
-                    console.error(`❌ Erreur lors du Million Verifier:`, mvError.message);
+                    console.error(`❌ ERREUR CRITIQUE lors du Million Verifier:`, mvError.message);
                     console.error(`📋 Stack trace:`, mvError.stack);
                     console.error(`⏰ Heure de l'erreur Million Verifier: ${new Date().toISOString()}`);
+                    
+                    // Ne pas arrêter le processus complet, mais signaler l'erreur
+                    console.error(`⚠️ Le processus s'arrête ici. Le fichier dédupliqué reste disponible: ${whoisFileName}`);
+                    throw mvError; // Relancer l'erreur pour arrêter le processus
                 }
             } else {
                 console.error(`❌ Fichier WHOIS non trouvé: ${whoisFilePath}`);
